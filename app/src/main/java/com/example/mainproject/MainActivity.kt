@@ -5,6 +5,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
+import com.example.mainproject.data.db.AppDatabase
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -16,5 +19,14 @@ class MainActivity : AppCompatActivity() {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
+
+        // --- ここから追加：データベースを触ってみる ---
+        lifecycleScope.launch {
+            // インスタンスを取得するだけで、DBファイルが作成され、Inspectorに表示されます
+            val db = AppDatabase.getInstance(applicationContext)
+            // 試しにデータを取得（空でもOK）
+            db.registrationDao().getPendingRegistrations()
+        }
+        // --- ここまで ---
     }
 }
