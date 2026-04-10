@@ -23,7 +23,7 @@
 
 ```bash
 git clone https://github.com/iput04-isono/Solution.git
-cd Solution/mainproject
+cd Solution
 ```
 
 **2. Android Studio で開く**
