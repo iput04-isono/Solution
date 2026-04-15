@@ -11,6 +11,7 @@ appcompat = "1.6.1"
 material = "1.10.0"
 activity = "1.12.2"
 constraintlayout = "2.1.4"
+onnxruntime = "1.17.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -24,6 +25,7 @@ androidx-constraintlayout = { group = "androidx.constraintlayout", name = "const
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

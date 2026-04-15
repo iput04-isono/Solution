@@ -52,4 +52,7 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
+
+    // OCR（PaddleOCR with ONNX Runtime）
+    implementation(libs.onnxruntime.android)
 }
