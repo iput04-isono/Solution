@@ -7,6 +7,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.mainproject.data.db.AppDatabase
+import com.example.mainproject.worker.SyncWorker
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -19,6 +20,9 @@ class MainActivity : AppCompatActivity() {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
+
+        // WorkManager の定期同期をスケジュール
+        SyncWorker.schedule(this)
 
         // --- ここから追加：データベースを触ってみる ---
         lifecycleScope.launch {
