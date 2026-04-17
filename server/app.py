@@ -37,6 +37,20 @@ JST = timezone(timedelta(hours=9))
 
 
 # ──────────────────────────────────────────────────
+# Jinja2 カスタムフィルター
+# ──────────────────────────────────────────────────
+
+@app.template_filter("ms_to_jst")
+def ms_to_jst(ms):
+    """Unix タイムスタンプ(ms) を JST の日時文字列に変換する Jinja2 フィルター"""
+    if not ms:
+        return "-"
+    try:
+        return datetime.fromtimestamp(int(ms) / 1000, tz=JST).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return "-"
+
+# ──────────────────────────────────────────────────
 # モデル定義
 # ──────────────────────────────────────────────────
 

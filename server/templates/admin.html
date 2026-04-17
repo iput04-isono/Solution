@@ -130,7 +130,7 @@
                             <td>{{ reg.construction_name }}</td>
                             <td>{{ reg.process_name }}</td>
                             <td><i class="bi bi-person-circle me-1 text-muted"></i>{{ reg.user_id }}</td>
-                            <td class="small text-muted">{{ reg.registered_at.strftime('%Y-%m-%d %H:%M') if reg.registered_at else '-' }}</td>
+                            <td class="small text-muted">{{ reg.registered_at | ms_to_jst }}</td>
                             <td class="small text-muted">{{ reg.received_at.strftime('%Y-%m-%d %H:%M') }}</td>
                             <td class="small text-muted font-monospace">{{ reg.device_ip or '-' }}</td>
                             <td>
