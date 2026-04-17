@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 全条件OCR比較結果画面 -->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <!-- ヘッダーバー -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#1976D2"
+        android:padding="12dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📊 前処理条件 × OCR 比較"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF" />
+
+        <TextView
+            android:id="@+id/textCompareImageName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="画像: -"
+            android:textSize="12sp"
+            android:textColor="#BBDEFB"
+            android:layout_marginTop="2dp" />
+    </LinearLayout>
+
+    <!-- 進捗バーとステータス -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:background="#E3F2FD">
+
+        <ProgressBar
+            android:id="@+id/progressBarCompare"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="8dp"
+            android:max="100"
+            android:progress="0"
+            android:layout_marginBottom="4dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/textCompareProgress"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="実行前"
+                android:textSize="12sp"
+                android:textColor="#1565C0" />
+
+            <Button
+                android:id="@+id/buttonStartCompare"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:text="▶ 比較開始"
+                android:textSize="12sp"
+                android:paddingHorizontal="12dp" />
+
+            <Button
+                android:id="@+id/buttonSortByConfidence"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:text="↓ 精度順"
+                android:textSize="12sp"
+                android:paddingHorizontal="12dp"
+                android:layout_marginStart="4dp"
+                android:enabled="false" />
+        </LinearLayout>
+
+        <!-- 白黒あり / なし フィルターボタン -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp">
+
+            <Button
+                android:id="@+id/buttonFilterAll"
+                android:layout_width="0dp"
+                android:layout_height="28dp"
+                android:layout_weight="1"
+                android:text="全条件"
+                android:textSize="11sp"
+                android:backgroundTint="#1976D2"
+                android:layout_marginEnd="2dp" />
+
+            <Button
+                android:id="@+id/buttonFilterBinary"
+                android:layout_width="0dp"
+                android:layout_height="28dp"
+                android:layout_weight="1"
+                android:text="⬛ 白黒のみ"
+                android:textSize="11sp"
+                android:backgroundTint="#424242"
+                android:layout_marginEnd="2dp" />
+
+            <Button
+                android:id="@+id/buttonFilterGray"
+                android:layout_width="0dp"
+                android:layout_height="28dp"
+                android:layout_weight="1"
+                android:text="🔘 グレーのみ"
+                android:textSize="11sp"
+                android:backgroundTint="#757575" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 比較結果リスト -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerViewResults"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingBottom="8dp" />
+
+</LinearLayout>

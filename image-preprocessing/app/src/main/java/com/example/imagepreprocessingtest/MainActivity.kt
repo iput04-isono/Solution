@@ -19,6 +19,7 @@
 package com.example.imagepreprocessingtest
 
 import android.content.ContentValues
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
@@ -58,6 +59,9 @@ class MainActivity : AppCompatActivity() {
 
     /** 一括処理の結果キャッシュ（ファイル名 → 前処理済みBitmap） */
     private val batchResults = mutableMapOf<String, Bitmap>()
+
+    /** 一括処理の時間キャッシュ（ファイル名 → 処理時間ms） */
+    private val batchTimings = mutableMapOf<String, Long>()
 
     // ----------------------------------------------------------------
     // ライフサイクル
@@ -172,6 +176,22 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 全条件OCR比較モードを起動
+        binding.buttonCompare.setOnClickListener {
+            if (!isOpenCVInitialized) {
+                Toast.makeText(this, "OpenCVが初期化されていません", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val filename = imageFiles.getOrElse(currentImageIndex) { "" }
+            if (filename.isEmpty()) {
+                Toast.makeText(this, "比較する画像を選択してください", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val intent = Intent(this, CompareResultsActivity::class.java)
+            intent.putExtra(CompareResultsActivity.EXTRA_IMAGE_FILENAME, filename)
+            startActivity(intent)
+        }
+
         // 前処理済み画像をギャラリーに保存（1枚）
         binding.buttonSaveImage.setOnClickListener {
             val bmp = lastProcessedBitmap
@@ -202,6 +222,16 @@ class MainActivity : AppCompatActivity() {
             } else {
                 saveAllImages()
             }
+        }
+
+        // 一括処理済み画像の一覧表示
+        binding.buttonShowBatchResults.setOnClickListener {
+            if (batchResults.isEmpty()) {
+                Toast.makeText(this, "先に全画像一括処理を実行してください", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            BatchResultStore.set(batchResults, batchTimings)
+            startActivity(Intent(this, BatchResultsActivity::class.java))
         }
     }
 
@@ -356,6 +386,8 @@ class MainActivity : AppCompatActivity() {
     private fun processAllImages() {
         val total = imageFiles.size
         batchResults.clear()
+        batchTimings.clear()
+        binding.buttonShowBatchResults.visibility = View.GONE
 
         setBatchState(true, 0, total)
 
@@ -383,6 +415,7 @@ class MainActivity : AppCompatActivity() {
 
                 if (processedBitmap != null) {
                     batchResults[filename] = processedBitmap
+                    batchTimings[filename] = elapsedMs
                     timings.add(Pair(filename, elapsedMs))
                 } else {
                     timings.add(Pair(filename, -1L))
@@ -392,6 +425,10 @@ class MainActivity : AppCompatActivity() {
             binding.progressBarBatch.progress = 100
             showBatchSummary(timings)
             setBatchState(false, total, total)
+            // 一括処理完了後に「一覧を表示」ボタンを出す
+            if (batchResults.isNotEmpty()) {
+                binding.buttonShowBatchResults.visibility = View.VISIBLE
+            }
         }
     }
 

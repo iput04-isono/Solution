@@ -73,4 +73,7 @@ dependencies {
     
     // OpenCV
     implementation(project(":opencv"))
+
+    // MLKit テキスト認識（オフライン・無料・Latin文字対応）
+    implementation("com.google.mlkit:text-recognition:16.0.0")
 }

@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 比較結果リストの1件分のカードレイアウト -->
+<androidx.cardview.widget.CardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="8dp"
+    android:layout_marginVertical="4dp"
+    app:cardElevation="2dp"
+    app:cardCornerRadius="6dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="10dp">
+
+        <!-- ヘッダー行: カテゴリバッジ + 条件名 + 処理時間 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="6dp">
+
+            <TextView
+                android:id="@+id/textCategory"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="A"
+                android:textSize="10sp"
+                android:textColor="#FFFFFF"
+                android:background="#757575"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="2dp"
+                android:layout_marginEnd="8dp"
+                android:layout_gravity="center_vertical" />
+
+            <TextView
+                android:id="@+id/textConditionName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="条件名"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_gravity="center_vertical" />
+
+            <TextView
+                android:id="@+id/textProcessTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--ms"
+                android:textSize="11sp"
+                android:textColor="#757575"
+                android:layout_gravity="center_vertical" />
+        </LinearLayout>
+
+        <!-- 画像サムネイル + OCR結果 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <!-- 前処理済み画像サムネイル -->
+            <ImageView
+                android:id="@+id/imageThumb"
+                android:layout_width="100dp"
+                android:layout_height="80dp"
+                android:scaleType="fitCenter"
+                android:background="#EEEEEE"
+                android:layout_marginEnd="10dp" />
+
+            <!-- OCR結果テキストエリア -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <!-- 認識テキスト -->
+                <TextView
+                    android:id="@+id/textOcrResult"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="（未実行）"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="#212121"
+                    android:fontFamily="monospace"
+                    android:layout_marginBottom="4dp" />
+
+                <!-- 信頼度 -->
+                <TextView
+                    android:id="@+id/textConfidence"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="信頼度: -"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="4dp" />
+
+                <!-- 詳細（折りたたみ表示用） -->
+                <TextView
+                    android:id="@+id/textOcrDetail"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="10sp"
+                    android:textColor="#9E9E9E"
+                    android:fontFamily="monospace"
+                    android:maxLines="3"
+                    android:ellipsize="end"
+                    android:visibility="gone" />
+
+            </LinearLayout>
+        </LinearLayout>
+
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

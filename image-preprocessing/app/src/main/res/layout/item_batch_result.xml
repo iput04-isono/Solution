@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 一括処理結果グリッドの1件分 -->
+<androidx.cardview.widget.CardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp"
+    app:cardElevation="2dp"
+    app:cardCornerRadius="6dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- 前処理済み画像 -->
+        <ImageView
+            android:id="@+id/imageBatchThumb"
+            android:layout_width="match_parent"
+            android:layout_height="140dp"
+            android:scaleType="fitCenter"
+            android:background="#F5F5F5" />
+
+        <!-- ファイル名 + 処理時間 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="6dp"
+            android:background="#FAFAFA">
+
+            <TextView
+                android:id="@+id/textBatchFilename"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="filename.jpg"
+                android:textSize="10sp"
+                android:textColor="#212121"
+                android:ellipsize="middle"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/textBatchTime"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="-- ms"
+                android:textSize="10sp"
+                android:textColor="#757575" />
+        </LinearLayout>
+
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

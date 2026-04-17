@@ -22,6 +22,20 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 全条件OCR比較画面 -->
+        <activity
+            android:name=".CompareResultsActivity"
+            android:exported="false"
+            android:label="前処理比較"
+            android:parentActivityName=".MainActivity" />
+
+        <!-- 一括処理済み画像 一覧表示画面 -->
+        <activity
+            android:name=".BatchResultsActivity"
+            android:exported="false"
+            android:label="処理済み画像一覧"
+            android:parentActivityName=".MainActivity" />
     </application>
 
 </manifest>

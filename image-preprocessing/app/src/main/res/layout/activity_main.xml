@@ -153,6 +153,15 @@
             android:text="詳細計測（各ステップの時間）"
             android:layout_marginBottom="4dp" />
 
+        <!-- 全条件OCR比較ボタン -->
+        <Button
+            android:id="@+id/buttonCompare"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📊 全条件OCR比較（20種）"
+            android:backgroundTint="#6A1B9A"
+            android:layout_marginBottom="4dp" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -210,6 +219,16 @@
             android:fontFamily="monospace"
             android:background="#FFF8E1"
             android:padding="8dp"
+            android:visibility="gone"
+            android:layout_marginBottom="4dp" />
+
+        <!-- 処理済み画像一覧表示ボタン（一括処理完了後に表示） -->
+        <Button
+            android:id="@+id/buttonShowBatchResults"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🖼 処理済み画像 一覧を表示"
+            android:backgroundTint="#E65100"
             android:visibility="gone"
             android:layout_marginBottom="8dp" />
 
