@@ -72,6 +72,12 @@ dependencies {
     // WorkManager (オフライン同期)
     implementation(libs.androidx.work.runtime)
 
+    // Retrofit + OkHttp (サーバー同期)
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.gson)
+    implementation(libs.okhttp.logging)
+    implementation(libs.gson)
+
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)

@@ -12,6 +12,9 @@ camerax = "1.3.4"
 onnxruntime = "1.17.1"
 workRuntime = "2.9.1"
 coroutines = "1.8.1"
+retrofit = "2.11.0"
+okhttp = "4.12.0"
+gson = "2.10.1"
 junit = "4.13.2"
 junitExt = "1.2.1"
 espresso = "3.6.1"
@@ -49,6 +52,12 @@ androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", ve
 # Coroutines
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }
+
+# Retrofit + OkHttp (サーバー同期)
+retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
+retrofit-gson = { group = "com.squareup.retrofit2", name = "converter-gson", version.ref = "retrofit" }
+okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
+gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 
 # Test
 junit = { group = "junit", name = "junit", version.ref = "junit" }

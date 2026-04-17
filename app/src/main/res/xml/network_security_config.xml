@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+        ローカル PC (Flask サーバー) への HTTP 通信を許可する設定。
+        192.168.x.x / 10.x.x.x / 172.16-31.x.x などのプライベートIPへの平文HTTP通信を許可。
+        本番・公開環境では HTTPS を使用すること。
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- 同一LAN内のプライベートIPアドレス（実機用） -->
+        <domain includeSubdomains="true">192.168</domain>
+        <domain includeSubdomains="true">10.0</domain>
+        <domain includeSubdomains="true">172.16</domain>
+        <!-- エミュレーター用ホストPC特殊アドレス -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>
