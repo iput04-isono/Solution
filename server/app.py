@@ -42,12 +42,14 @@ JST = timezone(timedelta(hours=9))
 
 @app.template_filter("ms_to_jst")
 def ms_to_jst(ms):
-    """Unix タイムスタンプ(ms) を JST の日時文字列に変換する Jinja2 フィルター"""
-    if not ms:
+    """Unix タイムスタンプ(ms) を JST の日時文字列に変換する"""
+    if ms is None or ms == "":
         return "-"
     try:
-        return datetime.fromtimestamp(int(ms) / 1000, tz=JST).strftime("%Y-%m-%d %H:%M")
-    except Exception:
+        # 数値であることを確認
+        ts = int(ms) / 1000
+        return datetime.fromtimestamp(ts, tz=JST).strftime("%Y-%m-%d %H:%M")
+    except (ValueError, TypeError, OverflowError):
         return "-"
 
 # ──────────────────────────────────────────────────
