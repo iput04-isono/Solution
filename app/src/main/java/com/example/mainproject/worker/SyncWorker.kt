@@ -57,15 +57,14 @@ class SyncWorker(
                 }
 
             } catch (e: Exception) {
-                // 失敗したらリトライ回数を増やして failed に更新
+                // リトライ回数を増やして failed に更新
                 dao.incrementRetryCount(registration.id, e.message ?: "Unknown error")
                 dao.updateSyncStatus(registration.id, "failed")
 
-                // 最大リトライ回数（3回）を超えていたら失敗を返す
-                val updated = dao.getPendingRegistrations()
-                    .find { it.id == registration.id }
-                if ((updated?.retry_count ?: 0) >= 3) {
-                    return Result.failure()
+                // 最大リトライ回数（3回）に達したらそのレコードをスキップして続行
+                // （次回doWork時にretry_count < 3のチェックで除外される）
+                if (registration.retry_count + 1 >= 3) {
+                    continue  // このレコードは諦めて次へ
                 }
                 return Result.retry()
             }

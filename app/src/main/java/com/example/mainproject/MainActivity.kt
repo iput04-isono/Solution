@@ -1,7 +1,10 @@
 package com.example.mainproject
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
+import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -16,6 +19,7 @@ import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -49,6 +53,17 @@ class MainActivity : AppCompatActivity() {
 
     // フル解像度カメラ撮影用 URI
     private var photoUri: Uri? = null
+
+    // カメラ権限リクエスト
+    private val requestCameraPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            launchCamera()
+        } else {
+            Toast.makeText(this, "カメラの権限が必要です", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     // フル解像度カメラ（TakePicture = JPEG保存してURIで受け取る）
     private val takePicture = registerForActivityResult(
@@ -90,13 +105,15 @@ class MainActivity : AppCompatActivity() {
         // 定期同期スケジュール
         SyncWorker.schedule(this)
 
-        // カメラボタン（フル解像度）
+        // カメラボタン（権限チェックしてから起動）
         findViewById<Button>(R.id.cameraButton).setOnClickListener {
-            val photoFile = File(cacheDir, "camera_images/photo_${System.currentTimeMillis()}.jpg")
-                .also { it.parentFile?.mkdirs() }
-            val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", photoFile)
-            photoUri = uri
-            takePicture.launch(uri)
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED
+            ) {
+                launchCamera()
+            } else {
+                requestCameraPermission.launch(Manifest.permission.CAMERA)
+            }
         }
 
         // ギャラリーボタン
@@ -107,18 +124,27 @@ class MainActivity : AppCompatActivity() {
         // 保存ボタン
         saveButton.setOnClickListener { saveToDb() }
 
-        // 同期ボタン
+        // 同期ボタン（手動で強制同期したい場合用）
         findViewById<Button>(R.id.syncButton).setOnClickListener {
-            val req = OneTimeWorkRequestBuilder<SyncWorker>()
-                .setConstraints(
-                    Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
-                        .build()
-                )
-                .build()
-            WorkManager.getInstance(this).enqueue(req)
-            Toast.makeText(this, "同期を開始しました", Toast.LENGTH_SHORT).show()
+            if (isNetworkAvailable()) {
+                enqueueSyncNow()
+                Toast.makeText(this, "同期を開始しました", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "オフラインです。接続時に自動同期されます", Toast.LENGTH_SHORT).show()
+            }
         }
+    }
+
+    // ──────────────────────────────────────────────
+    // カメラ起動（FileProvider経由）
+    // ──────────────────────────────────────────────
+
+    private fun launchCamera() {
+        val photoFile = File(cacheDir, "camera_images/photo_${System.currentTimeMillis()}.jpg")
+            .also { it.parentFile?.mkdirs() }
+        val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", photoFile)
+        photoUri = uri
+        takePicture.launch(uri)
     }
 
     // ──────────────────────────────────────────────
@@ -126,22 +152,36 @@ class MainActivity : AppCompatActivity() {
     // ──────────────────────────────────────────────
 
     private fun runOcrFromUri(uri: Uri) {
-        val bitmap = try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                ImageDecoder.decodeBitmap(
-                    ImageDecoder.createSource(contentResolver, uri)
-                ) { decoder, _, _ ->
-                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        lifecycleScope.launch {
+            val bitmap = withContext(Dispatchers.IO) {
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        ImageDecoder.decodeBitmap(
+                            ImageDecoder.createSource(contentResolver, uri)
+                        ) { decoder, _, _ ->
+                            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                        }.let { bmp ->
+                            // HARDWARE configはONNXに渡せないのでARGB_8888にコピー
+                            if (bmp.config == Bitmap.Config.HARDWARE) {
+                                bmp.copy(Bitmap.Config.ARGB_8888, false)
+                            } else {
+                                bmp
+                            }
+                        }
+                    } else {
+                        @Suppress("DEPRECATION")
+                        MediaStore.Images.Media.getBitmap(contentResolver, uri)
+                    }
+                } catch (e: Exception) {
+                    null
                 }
-            } else {
-                @Suppress("DEPRECATION")
-                MediaStore.Images.Media.getBitmap(contentResolver, uri)
             }
-        } catch (e: Exception) {
-            Toast.makeText(this, "画像の読み込みに失敗しました", Toast.LENGTH_SHORT).show()
-            return
+            if (bitmap == null) {
+                Toast.makeText(this@MainActivity, "画像の読み込みに失敗しました", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            runOcr(bitmap)
         }
-        runOcr(bitmap)
     }
 
     // ──────────────────────────────────────────────
@@ -211,14 +251,58 @@ class MainActivity : AppCompatActivity() {
                     productNumbers = productNumbers
                 )
             }
-            Toast.makeText(
-                this@MainActivity,
-                "DBに保存しました（${productNumbers.size}件）",
-                Toast.LENGTH_SHORT
-            ).show()
+
+            // ネットワーク状態に応じてメッセージを切り替えて同期をキュー
+            val isOnline = isNetworkAvailable()
+            val message = if (isOnline) {
+                enqueueSyncNow()
+                "DBに保存しました（${productNumbers.size}件）\nオンライン：即時同期します"
+            } else {
+                enqueueSyncWhenOnline()
+                "DBに保存しました（${productNumbers.size}件）\nオフライン：接続時に自動同期します"
+            }
+
+            Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
             saveButton.visibility = View.GONE
             ocrResultText.text    = "保存完了！次の画像を撮影してください。"
         }
+    }
+
+    /** ネットワーク接続確認 */
+    private fun isNetworkAvailable(): Boolean {
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
+                ?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        } else {
+            @Suppress("DEPRECATION")
+            cm.activeNetworkInfo?.isConnected == true
+        }
+    }
+
+    /** オンライン時：すぐに同期 */
+    private fun enqueueSyncNow() {
+        val req = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
+            )
+            .build()
+        WorkManager.getInstance(this).enqueue(req)
+    }
+
+    /** オフライン時：接続が回復したら自動同期 */
+    private fun enqueueSyncWhenOnline() {
+        val req = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
+            )
+            .build()
+        // WorkManager は制約が満たされるまで待機してから実行する
+        WorkManager.getInstance(this).enqueue(req)
     }
 
     override fun onDestroy() {

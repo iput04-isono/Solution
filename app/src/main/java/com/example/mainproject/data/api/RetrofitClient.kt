@@ -8,8 +8,8 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
 
-    // TODO: サーバーURLが確定したら差し替えること
-    private const val BASE_URL = "http://0.0.0.0:8000"
+    // エミュレータ→ホストPC の特殊アドレス（実機の場合はPCのローカルIPに変更）
+    private const val BASE_URL = "http://10.0.2.2:8000"
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
