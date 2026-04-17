@@ -31,6 +31,7 @@ import androidx.work.WorkManager
 import com.example.mainproject.data.db.AppDatabase
 import com.example.mainproject.data.repository.RegistrationRepository
 import com.example.mainproject.ocr.ImagePreprocessor
+import com.example.mainproject.ocr.LabelMatcher
 import com.example.mainproject.ocr.OcrEngine
 import com.example.mainproject.ocr.OcrResult
 import com.example.mainproject.worker.SyncWorker
@@ -48,7 +49,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var divisionGroup: RadioGroup
 
     private var ocrResults: List<OcrResult> = emptyList()
+    private var matchedTexts: List<String> = emptyList()  // LabelMatcher補正済みテキスト
     private var ocrEngine: OcrEngine? = null
+    private var labelMatcher: LabelMatcher? = null
     private val preprocessor = ImagePreprocessor()
 
     // フル解像度カメラ撮影用 URI
@@ -97,9 +100,10 @@ class MainActivity : AppCompatActivity() {
         progressBar   = findViewById(R.id.progressBar)
         divisionGroup = findViewById(R.id.divisionGroup)
 
-        // OCRエンジンをバックグラウンドで初期化
+        // OCRエンジン・LabelMatcherをバックグラウンドで初期化
         lifecycleScope.launch(Dispatchers.IO) {
             ocrEngine = OcrEngine(applicationContext)
+            labelMatcher = LabelMatcher(applicationContext)
         }
 
         // 定期同期スケジュール
@@ -203,17 +207,26 @@ class MainActivity : AppCompatActivity() {
             progressBar.visibility = View.GONE
             ocrResults = results
 
+            // LabelMatcherで各OCR結果を補正
+            val matcher = labelMatcher
+            matchedTexts = results.map { r ->
+                val best = matcher?.findBest(r.text)
+                best?.first ?: r.text  // マッチなし or 未初期化ならOCR生テキストをそのまま使う
+            }
+
             if (results.isEmpty()) {
                 ocrResultText.text = "文字が検出されませんでした。再撮影してください。"
             } else {
                 val sb = StringBuilder()
-                for (r in results) {
+                for ((r, matched) in results.zip(matchedTexts)) {
                     val label = when {
                         r.confidence >= 0.85f -> "[自動確定]"
                         r.confidence >= 0.60f -> "[要確認]  "
                         else                  -> "[再撮影]  "
                     }
-                    sb.appendLine("$label ${r.text}  (${(r.confidence * 100).toInt()}%)")
+                    // OCRテキストと補正後が異なる場合は両方表示
+                    val displayText = if (matched != r.text) "$matched  ← ${r.text}" else matched
+                    sb.appendLine("$label $displayText  (${(r.confidence * 100).toInt()}%)")
                 }
                 ocrResultText.text = sb.toString().trim()
                 saveButton.visibility = View.VISIBLE
@@ -231,8 +244,9 @@ class MainActivity : AppCompatActivity() {
             else            -> "end"
         }
         val productNumbers = ocrResults
-            .filter { it.confidence >= 0.60f }
-            .map { it.text }
+            .zip(matchedTexts)
+            .filter { (r, _) -> r.confidence >= 0.60f }
+            .map { (_, matched) -> matched }
 
         if (productNumbers.isEmpty()) {
             Toast.makeText(this, "保存できる認識結果がありません（信頼度60%未満）", Toast.LENGTH_SHORT).show()
