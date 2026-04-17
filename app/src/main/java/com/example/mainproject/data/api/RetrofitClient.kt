@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit
 object RetrofitClient {
 
     // TODO: サーバーURLが確定したら差し替えること
-    private const val BASE_URL = "https://your-server-url.example.com"
+    private const val BASE_URL = "http://0.0.0.0:8000"
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
