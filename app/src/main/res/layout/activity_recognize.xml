@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/background">
+
+    <!-- ツールバー -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        style="@style/ToolbarStyle"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        app:title="@string/recognize_title"
+        app:navigationIcon="@drawable/ic_arrow_back" />
+
+    <!-- メインコンテンツ -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="@dimen/spacing_lg">
+
+        <!-- 画像プレビューエリア -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardImagePreview"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            app:cardCornerRadius="@dimen/card_corner_radius"
+            app:cardElevation="4dp"
+            android:layout_marginBottom="@dimen/spacing_lg">
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <!-- プレビュー画像 -->
+                <ImageView
+                    android:id="@+id/ivPreview"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerCrop"
+                    android:visibility="gone"
+                    android:contentDescription="撮影画像プレビュー" />
+
+                <!-- プレースホルダー -->
+                <LinearLayout
+                    android:id="@+id/placeholderLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:background="#F0F0F0">
+
+                    <ImageView
+                        android:layout_width="80dp"
+                        android:layout_height="80dp"
+                        android:src="@android:drawable/ic_menu_camera"
+                        android:alpha="0.3"
+                        android:contentDescription="カメラアイコン" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/recognize_instruction"
+                        android:textSize="@dimen/text_caption"
+                        android:textColor="@color/text_hint"
+                        android:textAlignment="center"
+                        android:layout_marginTop="@dimen/spacing_md"
+                        android:layout_marginHorizontal="@dimen/spacing_xl" />
+
+                </LinearLayout>
+            </FrameLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- 操作ボタン -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCamera"
+                style="@style/PrimaryButton"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/button_height_large"
+                android:layout_weight="1"
+                android:text="@string/btn_camera"
+                app:icon="@android:drawable/ic_menu_camera"
+                android:layout_marginEnd="@dimen/spacing_sm" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnGallery"
+                style="@style/SecondaryButton"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/button_height_large"
+                android:layout_weight="1"
+                android:text="@string/btn_gallery"
+                app:icon="@android:drawable/ic_menu_gallery" />
+
+        </LinearLayout>
+
+        <!-- 認識実行ボタン（画像選択後に表示） -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnRecognize"
+            style="@style/PrimaryButton"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/button_height_large"
+            android:text="文字を認識する"
+            android:visibility="gone"
+            android:layout_marginTop="@dimen/spacing_md"
+            app:backgroundTint="@color/secondary" />
+
+    </LinearLayout>
+
+    <!-- ローディング -->
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/progressRecognize"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:indeterminate="true"
+        android:visibility="gone" />
+
+</LinearLayout>

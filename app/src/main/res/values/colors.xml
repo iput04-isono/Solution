@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- メインカラー -->
+    <color name="primary">#1565C0</color>
+    <color name="primary_dark">#0D47A1</color>
+    <color name="primary_light">#42A5F5</color>
+    <color name="on_primary">#FFFFFF</color>
+
+    <!-- セカンダリカラー -->
+    <color name="secondary">#FF6F00</color>
+    <color name="secondary_dark">#E65100</color>
+    <color name="on_secondary">#FFFFFF</color>
+
+    <!-- 背景・サーフェス -->
+    <color name="background">#F5F5F5</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="on_background">#212121</color>
+    <color name="on_surface">#212121</color>
+
+    <!-- ステータスカラー -->
+    <color name="success">#2E7D32</color>
+    <color name="warning">#F57F17</color>
+    <color name="error">#C62828</color>
+    <color name="error_light">#FFCDD2</color>
+    <color name="info">#1565C0</color>
+
+    <!-- 同期ステータスカラー -->
+    <color name="status_pending">#FF6F00</color>
+    <color name="status_syncing">#1565C0</color>
+    <color name="status_synced">#2E7D32</color>
+    <color name="status_failed">#C62828</color>
+
+    <!-- テキストカラー -->
+    <color name="text_primary">#212121</color>
+    <color name="text_secondary">#757575</color>
+    <color name="text_hint">#BDBDBD</color>
+
+    <!-- 区切り線 -->
+    <color name="divider">#E0E0E0</color>
+
+    <!-- カメラオーバーレイ -->
+    <color name="camera_overlay">#80000000</color>
+    <color name="camera_frame">#FFFFFF</color>
+</resources>

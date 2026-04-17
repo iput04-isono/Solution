@@ -1,0 +1,130 @@
+package com.crossvision.f.ui.register
+
+import android.os.Bundle
+import android.view.Gravity
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import com.crossvision.f.R
+import com.crossvision.f.data.model.Registration
+import com.crossvision.f.data.model.SyncStatus
+import com.crossvision.f.data.repository.AppRepository
+import com.crossvision.f.databinding.ActivityRegisterBinding
+import com.crossvision.f.sync.SyncManager
+import com.crossvision.f.sync.SyncWorker
+import com.google.android.material.chip.Chip
+import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.launch
+
+/**
+ * 登録画面
+ * UI設計書 1.6.1 登録画面に準拠
+ */
+class RegisterActivity : AppCompatActivity() {
+
+    private lateinit var binding: ActivityRegisterBinding
+    private lateinit var repository: AppRepository
+    private lateinit var syncManager: SyncManager
+    private var productCodes = listOf<String>()
+    private var constructionName = ""
+    private var processName = ""
+    private var userId = ""
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityRegisterBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        repository = AppRepository(applicationContext)
+        syncManager = SyncManager(applicationContext)
+
+        userId = intent.getStringExtra("USER_ID") ?: ""
+        constructionName = intent.getStringExtra("CONSTRUCTION_NAME") ?: ""
+        processName = intent.getStringExtra("PROCESS_NAME") ?: ""
+        productCodes = intent.getStringArrayListExtra("PRODUCT_CODES") ?: arrayListOf()
+
+        setupToolbar()
+        setupUI()
+    }
+
+    private fun setupToolbar() {
+        binding.toolbar.setNavigationOnClickListener { finish() }
+    }
+
+    private fun setupUI() {
+        // 製品コード一覧を動的に追加
+        productCodes.forEachIndexed { index, code ->
+            val codeView = TextView(this).apply {
+                text = "${index + 1}. $code"
+                textSize = 16f
+                setTextColor(getColor(R.color.text_primary))
+                setPadding(0, 8, 0, 8)
+            }
+            binding.llProductCodes.addView(codeView)
+        }
+
+        // 工事・工程情報の表示
+        binding.tvConstructionName.text = "工事名: $constructionName"
+        binding.tvProcessName.text = "工程名: $processName"
+
+        // 登録ボタン
+        binding.btnRegister.setOnClickListener {
+            performRegistration()
+        }
+    }
+
+    private fun performRegistration() {
+        val warehouseNo = binding.etWarehouseNo.text?.toString()?.trim() ?: ""
+        val columnNo = binding.etColumnNo.text?.toString()?.trim() ?: ""
+        val tierNo = binding.etTierNo.text?.toString()?.trim() ?: ""
+
+        binding.btnRegister.isEnabled = false
+        binding.progressRegister.visibility = android.view.View.VISIBLE
+
+        lifecycleScope.launch {
+            try {
+                val isOnline = syncManager.isNetworkAvailable()
+                val initialStatus = if (isOnline) SyncStatus.PENDING else SyncStatus.PENDING
+
+                // 各製品コードを登録
+                val registrations = productCodes.map { code ->
+                    Registration(
+                        productCode = code,
+                        constructionName = constructionName,
+                        processName = processName,
+                        warehouseNo = warehouseNo,
+                        columnNo = columnNo,
+                        tierNo = tierNo,
+                        syncStatus = initialStatus,
+                        userId = userId
+                    )
+                }
+
+                repository.insertRegistrations(registrations)
+
+                // オンラインなら即座に同期を試行
+                if (isOnline) {
+                    SyncWorker.executeImmediateSync(applicationContext)
+                    showSuccessMessage("登録が完了しました（${productCodes.size}件）")
+                } else {
+                    showSuccessMessage("オフラインで保存しました（${productCodes.size}件）\nオンライン復帰時に自動送信されます")
+                }
+
+            } catch (e: Exception) {
+                Snackbar.make(binding.root, "登録に失敗しました: ${e.message}", Snackbar.LENGTH_LONG)
+                    .show()
+            } finally {
+                binding.btnRegister.isEnabled = true
+                binding.progressRegister.visibility = android.view.View.GONE
+            }
+        }
+    }
+
+    private fun showSuccessMessage(message: String) {
+        Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG)
+            .setAction("OK") { finish() }
+            .show()
+    }
+}

@@ -1,0 +1,20 @@
+# Android Studio / Gradle
+.gradle/
+build/
+*.iml
+.idea/
+local.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Kotlin
+*.class
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Captured images (runtime data)
+captured_images/
