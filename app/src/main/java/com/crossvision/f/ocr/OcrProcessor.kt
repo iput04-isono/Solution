@@ -9,9 +9,9 @@ import kotlinx.coroutines.withContext
  * PaddleOCR (ONNX) を使用したOCR処理クラス
  * オンデバイスで動作するため、オフライン環境でも使用可能
  */
-class OcrProcessor(context: Context) {
+class OcrProcessor(private val context: Context) {
 
-    private val engine = OcrEngine(context)
+    private var engine: OcrEngine? = null
     private val preprocessor = ImagePreprocessor()
 
     /**
@@ -20,10 +20,15 @@ class OcrProcessor(context: Context) {
      * @return 認識結果のリスト（製品コード候補情報）
      */
     suspend fun recognizeText(bitmap: Bitmap): List<DomainOcrResult> = withContext(Dispatchers.Default) {
+        // バックグラウンドスレッドで重いモデルを初期化する
+        if (engine == null) {
+            engine = OcrEngine(context)
+        }
+
         val processedImage = preprocessor.preprocess(bitmap)
         // 多角形検出(runOcrPolygon)または標準矩形検出(runOcr)を選択。
         // パイプや鉄骨など斜めの文字に強い多角形検出をデフォルト使用。
-        val rawResults = engine.runOcrPolygon(processedImage)
+        val rawResults = engine!!.runOcrPolygon(processedImage)
         
         val ocrResults = mutableListOf<DomainOcrResult>()
         
@@ -68,7 +73,8 @@ class OcrProcessor(context: Context) {
      * リソースの解放
      */
     fun close() {
-        engine.close()
+        engine?.close()
+        engine = null
     }
 }
 
