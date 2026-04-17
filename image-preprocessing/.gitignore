@@ -13,3 +13,7 @@ local.properties
 /captures
 .externalNativeBuild
 .cxx
+
+# テスト用画像・正解ラベル（Google Drive で共有 → ローカルに配置）
+app/src/main/assets/images/
+app/src/main/assets/Images_Answer/

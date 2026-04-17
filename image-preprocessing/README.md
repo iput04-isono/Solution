@@ -69,14 +69,32 @@
 
 ## 必要な assets
 
-| ファイル | 役割 |
-|---|---|
-| `det.onnx`（84MB） | テキスト領域検出モデル（DBNet） |
-| `ppocr_rec.onnx`（7.5MB） | 文字認識モデル（SVTR） |
-| `dict.txt` | 認識文字辞書 |
-| `product_labels.txt` | 正解製品コード一覧（1,017件） |
-| `images/` | テスト用鉄骨画像（14枚） |
-| `Images_Answer/` | テスト画像ごとの正解ラベル |
+| ファイル | 役割 | 入手方法 |
+|---|---|---|
+| `det.onnx`（84MB） | テキスト領域検出モデル（DBNet） | このリポジトリに含まれる |
+| `ppocr_rec.onnx`（7.5MB） | 文字認識モデル（SVTR） | このリポジトリに含まれる |
+| `dict.txt` | 認識文字辞書 | このリポジトリに含まれる |
+| `product_labels.txt` | 正解製品コード一覧（1,017件） | このリポジトリに含まれる |
+| `images/` | テスト用鉄骨画像（14枚） | **Google Drive から取得**（下記参照） |
+| `Images_Answer/` | テスト画像ごとの正解ラベル | **Google Drive から取得**（下記参照） |
+
+### テストデータの配置手順
+
+`images/` と `Images_Answer/` はチームの Google Drive で共有しています。  
+以下の手順でローカルに配置してください。
+
+```
+1. Google Drive の共有フォルダから
+   「images/」と「Images_Answer/」をダウンロード
+
+2. 以下のパスに配置する
+   image-preprocessing/
+   └── app/src/main/assets/
+       ├── images/          ← ここに画像ファイルを配置
+       └── Images_Answer/   ← ここに正解ラベルを配置
+```
+
+> ※ Google Drive のリンクは坂井まで Slack でお問い合わせください。
 
 ---
 
