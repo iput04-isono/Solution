@@ -64,4 +64,7 @@ dependencies {
     implementation(libs.retrofit.gson)
     implementation(libs.okhttp.core)
     implementation(libs.okhttp.logging)
+
+    // PaddleOCR（ONNX Runtime）
+    implementation(libs.onnxruntime.android)
 }

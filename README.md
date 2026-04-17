@@ -28,7 +28,7 @@ cd Solution
 
 **2. Android Studio で開く**
 
-`File → Open` から `Solution/mainproject` フォルダを選択します。
+`File → Open` から `Solution` フォルダを選択します。
 
 **3. Gradle Sync**
 
