@@ -1,55 +1,52 @@
 package com.crossvision.f.ocr
 
+import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Rect
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
- * ML Kit を使用したOCR処理クラス
+ * PaddleOCR (ONNX) を使用したOCR処理クラス
  * オンデバイスで動作するため、オフライン環境でも使用可能
  */
-class OcrProcessor {
+class OcrProcessor(context: Context) {
 
-    // ML Kit のテキスト認識エンジン（Latin文字用）
-    private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+    private val engine = OcrEngine(context)
+    private val preprocessor = ImagePreprocessor()
 
     /**
      * 画像からテキストを認識する
      * @param bitmap 撮影画像
-     * @return 認識結果のリスト（製品コード候補と位置情報）
+     * @return 認識結果のリスト（製品コード候補情報）
      */
-    suspend fun recognizeText(bitmap: Bitmap): List<OcrResult> {
-        val inputImage = InputImage.fromBitmap(bitmap, 0)
-        val result = recognizer.process(inputImage).await()
+    suspend fun recognizeText(bitmap: Bitmap): List<DomainOcrResult> = withContext(Dispatchers.Default) {
+        val processedImage = preprocessor.preprocess(bitmap)
+        // 多角形検出(runOcrPolygon)または標準矩形検出(runOcr)を選択。
+        // パイプや鉄骨など斜めの文字に強い多角形検出をデフォルト使用。
+        val rawResults = engine.runOcrPolygon(processedImage)
+        
+        val ocrResults = mutableListOf<DomainOcrResult>()
+        
+        for (res in rawResults) {
+            val text = res.text.trim()
+            if (text.isEmpty()) continue
 
-        val ocrResults = mutableListOf<OcrResult>()
+            // 製品コードとして妥当性をチェック
+            val cleanedCode = ProductCodeValidator.cleanProductCode(text)
+            val validation = ProductCodeValidator.validate(cleanedCode)
 
-        for (block in result.textBlocks) {
-            for (line in block.lines) {
-                val text = line.text.trim()
-
-                // 製品コードとして妥当性をチェック
-                val cleanedCode = ProductCodeValidator.cleanProductCode(text)
-                val validation = ProductCodeValidator.validate(cleanedCode)
-
-                if (validation.isValid) {
-                    ocrResults.add(
-                        OcrResult(
-                            rawText = text,
-                            cleanedCode = cleanedCode,
-                            confidence = line.confidence,
-                            boundingBox = line.boundingBox,
-                            isValid = true
-                        )
+            if (validation.isValid) {
+                ocrResults.add(
+                    DomainOcrResult(
+                        rawText = text,
+                        cleanedCode = cleanedCode,
+                        confidence = res.confidence,
+                        isValid = true
                     )
-                }
+                )
             }
         }
-
-        return ocrResults
+        ocrResults
     }
 
     /**
@@ -62,7 +59,7 @@ class OcrProcessor {
     suspend fun recognizeMultipleProducts(
         bitmap: Bitmap,
         maxResults: Int = 5
-    ): List<OcrResult> {
+    ): List<DomainOcrResult> {
         val results = recognizeText(bitmap)
         return results.take(maxResults)
     }
@@ -71,17 +68,16 @@ class OcrProcessor {
      * リソースの解放
      */
     fun close() {
-        recognizer.close()
+        engine.close()
     }
 }
 
 /**
- * OCR認識結果
+ * 画面へ引き渡す用のOCR認識結果
  */
-data class OcrResult(
+data class DomainOcrResult(
     val rawText: String,          // OCR生テキスト
     val cleanedCode: String,      // クリーニング済み製品コード
     val confidence: Float,        // 認識信頼度
-    val boundingBox: Rect?,       // 画像上の認識領域
     val isValid: Boolean          // バリデーション結果
 )

@@ -16,7 +16,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.crossvision.f.databinding.ActivityRecognizeBinding
 import com.crossvision.f.ocr.OcrProcessor
-import com.crossvision.f.ocr.OcrResult
+import com.crossvision.f.ocr.DomainOcrResult
 import com.crossvision.f.ui.camera.CameraActivity
 import com.crossvision.f.ui.confirm.ConfirmActivity
 import kotlinx.coroutines.launch
@@ -29,7 +29,7 @@ import java.io.File
 class RecognizeActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityRecognizeBinding
-    private val ocrProcessor = OcrProcessor()
+    private lateinit var ocrProcessor: OcrProcessor
     private var currentBitmap: Bitmap? = null
     private var constructionName = ""
     private var processName = ""
@@ -83,6 +83,8 @@ class RecognizeActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityRecognizeBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        
+        ocrProcessor = OcrProcessor(this)
 
         userId = intent.getStringExtra("USER_ID") ?: ""
         constructionName = intent.getStringExtra("CONSTRUCTION_NAME") ?: ""
@@ -160,7 +162,7 @@ class RecognizeActivity : AppCompatActivity() {
         }
     }
 
-    private fun navigateToConfirm(results: List<OcrResult>) {
+    private fun navigateToConfirm(results: List<DomainOcrResult>) {
         val intent = Intent(this, ConfirmActivity::class.java).apply {
             putExtra("USER_ID", userId)
             putExtra("CONSTRUCTION_NAME", constructionName)

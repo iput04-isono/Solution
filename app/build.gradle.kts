@@ -66,8 +66,8 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
-    // ML Kit (オフラインOCR)
-    implementation(libs.mlkit.text.recognition)
+    // PaddleOCR（ONNX Runtime）- OCRエンジン用
+    implementation(libs.onnxruntime.android)
 
     // WorkManager (オフライン同期)
     implementation(libs.androidx.work.runtime)
