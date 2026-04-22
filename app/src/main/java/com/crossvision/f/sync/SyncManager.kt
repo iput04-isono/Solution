@@ -28,7 +28,7 @@ class SyncManager(private val context: Context) {
     /**
      * サーバー（PC）をネットワーク内で検索する
      */
-    private suspend fun discoverServer(): Boolean {
+    suspend fun discoverServer(): Boolean {
         Log.d(TAG, "サーバーを検索中...")
         return withTimeoutOrNull(5000L) { // 最大5秒間探す
             suspendCancellableCoroutine { continuation ->

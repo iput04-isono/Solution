@@ -101,10 +101,17 @@ class RegisterActivity : AppCompatActivity() {
 
                 repository.insertRegistrations(registrations)
 
-                // 通信状態に応じたメッセージの出し分け
+                // 通信状態およびサーバーの存在に応じたメッセージの出し分け
                 if (isOnline) {
-                    SyncWorker.executeImmediateSync(applicationContext)
-                    showSuccessMessage("サーバーへの送信を開始しました（${productCodes.size}件）\n同期状況は履歴から確認できます")
+                    // 実際にサーバーが見つかるか試行
+                    val isServerFound = syncManager.discoverServer()
+                    
+                    if (isServerFound) {
+                        SyncWorker.executeImmediateSync(applicationContext)
+                        showSuccessMessage("サーバーに接続しました。送信を開始します（${productCodes.size}件）\n完了状況は履歴から確認できます")
+                    } else {
+                        showSuccessMessage("Wi-Fi接続中ですがサーバーが見つかりません。自動同期ジョブに登録しました（${productCodes.size}件）")
+                    }
                 } else {
                     showSuccessMessage("オフラインで保存しました（${productCodes.size}件）\nネットワーク復帰時に自動で送信されます")
                 }
