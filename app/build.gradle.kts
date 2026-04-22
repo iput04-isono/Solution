@@ -66,7 +66,19 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
-    // PaddleOCR（ONNX Runtime）- OCRエンジン用
+    // WorkManager
+    implementation(libs.androidx.work.runtime)
+
+    // Coroutines
+    implementation(libs.kotlinx.coroutines.android)
+
+    // Retrofit + OkHttp
+    implementation(libs.retrofit.core)
+    implementation(libs.retrofit.gson)
+    implementation(libs.okhttp.core)
+    implementation(libs.okhttp.logging)
+
+    // PaddleOCR（ONNX Runtime）
     implementation(libs.onnxruntime.android)
 
     // WorkManager (オフライン同期)
