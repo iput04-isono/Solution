@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
@@ -55,7 +57,7 @@ class RecognizeActivity : AppCompatActivity() {
             if (imagePath != null) {
                 val bitmap = BitmapFactory.decodeFile(imagePath)
                 if (bitmap != null) {
-                    setPreviewImage(bitmap)
+                    setPreviewImage(correctExifRotation(bitmap, imagePath))
                 }
             }
         }
@@ -147,8 +149,9 @@ class RecognizeActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val results = ocrProcessor.recognizeMultipleProducts(bitmap)
-                navigateToConfirm(results)
+                val (overlayBitmap, results) = ocrProcessor.recognizeWithOverlay(bitmap)
+                val overlayPath = saveOverlayBitmap(overlayBitmap)
+                navigateToConfirm(results, overlayPath)
             } catch (e: Exception) {
                 Toast.makeText(
                     this@RecognizeActivity,
@@ -162,21 +165,53 @@ class RecognizeActivity : AppCompatActivity() {
         }
     }
 
-    private fun navigateToConfirm(results: List<DomainOcrResult>) {
+    /** オーバーレイ画像を一時ファイルに保存してパスを返す */
+    private fun saveOverlayBitmap(bitmap: Bitmap): String {
+        val file = File(cacheDir, "ocr_overlay.jpg")
+        file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it) }
+        return file.absolutePath
+    }
+
+    private fun navigateToConfirm(results: List<DomainOcrResult>, overlayPath: String? = null) {
+        val matched   = results.filter { it.matchedLabel != null }
+        val unmatched = results.filter { it.matchedLabel == null }
+
         val intent = Intent(this, ConfirmActivity::class.java).apply {
+            putExtra("OVERLAY_IMAGE_PATH", overlayPath)
             putExtra("USER_ID", userId)
             putExtra("CONSTRUCTION_NAME", constructionName)
             putExtra("PROCESS_NAME", processName)
-            putStringArrayListExtra(
-                "PRODUCT_CODES",
-                ArrayList(results.map { it.cleanedCode })
-            )
-            putStringArrayListExtra(
-                "RAW_TEXTS",
-                ArrayList(results.map { it.rawText })
-            )
+            // ラベル距離 ≤ 3（登録候補）
+            putStringArrayListExtra("PRODUCT_CODES", ArrayList(matched.map { it.displayCode }))
+            putStringArrayListExtra("RAW_TEXTS",     ArrayList(matched.map { it.rawText }))
+            putStringArrayListExtra("DEBUG_INFO", ArrayList(matched.map { r ->
+                val conf  = "%.2f".format(r.confidence)
+                val dist  = r.matchDistance.toString()
+                "信頼度:$conf  距離:$dist  OCR:${r.rawText}"
+            }))
+            // ラベル距離 > 3（参考表示）
+            putStringArrayListExtra("UNMATCHED_TEXTS", ArrayList(unmatched.map { r ->
+                val conf = "%.2f".format(r.confidence)
+                "${r.rawText}  (信頼度:$conf)"
+            }))
         }
         startActivity(intent)
+    }
+
+    /** EXIFの向き情報に基づいてBitmapを正しい向きに回転する */
+    private fun correctExifRotation(bitmap: Bitmap, path: String): Bitmap {
+        val exif = try { ExifInterface(path) } catch (e: Exception) { return bitmap }
+        val orientation = exif.getAttributeInt(
+            ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL
+        )
+        val degrees = when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90  -> 90f
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+            else -> return bitmap
+        }
+        val matrix = Matrix().apply { postRotate(degrees) }
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 
     override fun onDestroy() {
