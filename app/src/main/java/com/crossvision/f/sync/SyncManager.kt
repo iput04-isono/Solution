@@ -8,6 +8,9 @@ import com.crossvision.f.data.api.RetrofitClient
 import com.crossvision.f.data.model.RegistrationRequest
 import com.crossvision.f.data.model.SyncStatus
 import com.crossvision.f.data.repository.AppRepository
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 
 /**
  * オフライン同期マネージャー
@@ -20,6 +23,30 @@ class SyncManager(private val context: Context) {
     }
 
     private val repository = AppRepository(context)
+    private val nsdHelper = NsdHelper(context)
+
+    /**
+     * サーバー（PC）をネットワーク内で検索する
+     */
+    private suspend fun discoverServer(): Boolean {
+        Log.d(TAG, "サーバーを検索中...")
+        return withTimeoutOrNull(5000L) { // 最大5秒間探す
+            suspendCancellableCoroutine { continuation ->
+                nsdHelper.onServerFound = { host, port ->
+                    val url = "http://$host:$port/"
+                    Log.i(TAG, "サーバー発見: $url")
+                    RetrofitClient.serverBaseUrl = url
+                    nsdHelper.stopDiscovery()
+                    if (continuation.isActive) continuation.resume(true)
+                }
+                nsdHelper.startDiscovery()
+
+                continuation.invokeOnCancellation {
+                    nsdHelper.stopDiscovery()
+                }
+            }
+        } ?: false
+    }
 
     /**
      * ネットワーク接続状態を確認
@@ -40,6 +67,12 @@ class SyncManager(private val context: Context) {
         if (!isNetworkAvailable()) {
             Log.d(TAG, "ネットワーク未接続のためスキップ")
             return 0
+        }
+
+        // 送信前にサーバーを自動発見
+        val found = discoverServer()
+        if (!found) {
+            Log.w(TAG, "サーバーが見つかりませんでした。以前の設定値で試行します: ${RetrofitClient.serverBaseUrl}")
         }
 
         val unsyncedItems = repository.getUnsyncedRegistrations()

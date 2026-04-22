@@ -34,12 +34,20 @@ object RetrofitClient {
     private var _retrofit: Retrofit? = null
     private var _apiService: ApiService? = null
 
+    private const val SYNC_API_KEY = "SEVEN_STAR_SYNC_KEY_2024"
+
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
 
     private val okHttpClient: OkHttpClient
         get() = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val request = chain.request().newBuilder()
+                    .addHeader("X-API-KEY", SYNC_API_KEY)
+                    .build()
+                chain.proceed(request)
+            }
             .addInterceptor(loggingInterceptor)
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)

@@ -23,15 +23,33 @@ Android アプリから呼ばれる API:
 
 import csv
 import io
+import socket
+import os
+from functools import wraps
 from datetime import datetime, timezone, timedelta
 from flask import Flask, request, jsonify, render_template, Response
 from flask_sqlalchemy import SQLAlchemy
+from zeroconf import IPVersion, ServiceInfo, Zeroconf
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///crossvision.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
+
+# ──────────────────────────────────────────────────
+# セキュリティ設定 (APIキー)
+# ──────────────────────────────────────────────────
+SYNC_API_KEY = "SEVEN_STAR_SYNC_KEY_2024"
+
+def require_api_key(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        key = request.headers.get("X-API-KEY")
+        if key != SYNC_API_KEY:
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
 JST = timezone(timedelta(hours=9))
 
@@ -88,6 +106,7 @@ class Registration(db.Model):
 # ──────────────────────────────────────────────────
 
 @app.route("/api/registrations", methods=["POST"])
+@require_api_key
 def post_registration():
     """Android アプリから OCR 認識データを受信して DB に保存する"""
     data = request.get_json(silent=True)
@@ -202,6 +221,50 @@ def delete_registration(reg_id):
 
 
 # ──────────────────────────────────────────────────
+# 自動発見 (mDNS/Zeroconf) 配信
+# ──────────────────────────────────────────────────
+
+class DiscoveryServer:
+    def __init__(self, port):
+        self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
+        self.port = port
+        self.service_info = None
+
+    def start(self):
+        # サービスの登録情報を定義
+        hostname = socket.gethostname()
+        try:
+            # 外部と通信可能な自IPを取得
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            local_ip = socket.gethostbyname(hostname)
+
+        # サービスタイプ: _crossvision._tcp.local.
+        desc = {"version": "1.0", "name": "CrossVision-F-Server"}
+        self.service_info = ServiceInfo(
+            "_crossvision._tcp.local.",
+            f"SevenStarServer.{hostname}._crossvision._tcp.local.",
+            addresses=[socket.inet_aton(local_ip)],
+            port=self.port,
+            properties=desc,
+            server=f"{hostname}.local.",
+        )
+        
+        print(f"[*] 自動発見サービスを開始: {local_ip}:{self.port}")
+        self.zeroconf.register_service(self.service_info)
+
+    def stop(self):
+        if self.service_info:
+            try:
+                self.zeroconf.unregister_service(self.service_info)
+            except:
+                pass
+        self.zeroconf.close()
+
+# ──────────────────────────────────────────────────
 # 起動
 # ──────────────────────────────────────────────────
 
@@ -211,8 +274,17 @@ if __name__ == "__main__":
         print("=" * 50)
         print("CrossVision F 管理サーバー 起動中")
         print("管理画面: http://localhost:5000/admin")
-        print("Android から接続する場合は PC の IP アドレスを使用してください")
-        print("  例: http://192.168.x.x:5000/api/registrations")
-        print("  PCのIPは ipconfig コマンドで確認できます")
+        print("合言葉による認証と、自動発見サービスが有効です")
         print("=" * 50)
-    app.run(host="0.0.0.0", port=5000, debug=True)
+
+    # Flaskのデバッグリローダーによる二重起動を考慮
+    discovery = None
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
+        discovery = DiscoveryServer(5000)
+        discovery.start()
+
+    try:
+        app.run(host="0.0.0.0", port=5000, debug=True)
+    finally:
+        if discovery:
+            discovery.stop()
