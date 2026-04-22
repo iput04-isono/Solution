@@ -159,7 +159,16 @@ class RecognizeActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val results = ocrProcessor.recognizeMultipleProducts(bitmap)
+                // プロトタイプ統合: 枠描き済み画像と結果をペアで取得
+                val (overlayBitmap, results) = ocrProcessor.recognizeTextWithOverlay(bitmap)
+                
+                // 枠描き済み画像をキャッシュに保存してパスを更新
+                val overlayFile = File(cacheDir, "ocr_overlay_preview.jpg")
+                overlayFile.outputStream().use { out ->
+                    overlayBitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                }
+                lastImagePath = overlayFile.absolutePath
+                
                 navigateToConfirm(results)
             } catch (e: Exception) {
                 Toast.makeText(
@@ -167,6 +176,7 @@ class RecognizeActivity : AppCompatActivity() {
                     "認識に失敗しました: ${e.message}",
                     Toast.LENGTH_LONG
                 ).show()
+                android.util.Log.e("RecognizeActivity", "OCR Error", e)
             } finally {
                 binding.progressRecognize.visibility = View.GONE
                 binding.btnRecognize.isEnabled = true
@@ -179,7 +189,7 @@ class RecognizeActivity : AppCompatActivity() {
             putExtra("USER_ID", userId)
             putExtra("CONSTRUCTION_NAME", constructionName)
             putExtra("PROCESS_NAME", processName)
-            putExtra("IMAGE_PATH", lastImagePath) // 画像パスを追加
+            putExtra("IMAGE_PATH", lastImagePath)
             putStringArrayListExtra(
                 "PRODUCT_CODES",
                 ArrayList(results.map { it.cleanedCode })
@@ -188,7 +198,10 @@ class RecognizeActivity : AppCompatActivity() {
                 "RAW_TEXTS",
                 ArrayList(results.map { it.rawText })
             )
-            // 候補リストを | 区切りで渡す
+            putStringArrayListExtra(
+                "CONFIDENCES",
+                ArrayList(results.map { it.confidence.toString() })
+            )
             putStringArrayListExtra(
                 "CANDIDATES",
                 ArrayList(results.map { it.candidates.joinToString("|") })

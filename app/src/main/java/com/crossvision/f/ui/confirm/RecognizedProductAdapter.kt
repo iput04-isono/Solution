@@ -1,5 +1,6 @@
 package com.crossvision.f.ui.confirm
 
+import android.view.View
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
@@ -86,6 +87,19 @@ class RecognizedProductAdapter(
             }
 
             binding.tvRawText.text = if (item.isEdited) "（手動修正済み）" else "認識テキスト: ${item.rawText}"
+            
+            // 信頼度に応じた色分け（プロトタイプ準拠）
+            val confidenceColor = when {
+                item.confidence >= 0.85f -> android.graphics.Color.parseColor("#4CAF50") // Green
+                item.confidence >= 0.60f -> android.graphics.Color.parseColor("#FFC107") // Yellow
+                else -> android.graphics.Color.parseColor("#F44336") // Red
+            }
+            binding.tvConfidence.run {
+                visibility = View.VISIBLE
+                text = "信頼度: ${(item.confidence * 100).toInt()}%"
+                setTextColor(confidenceColor)
+            }
+            
             binding.cbSelect.isChecked = item.isSelected
 
             binding.cbSelect.setOnCheckedChangeListener { _, isChecked ->
@@ -130,5 +144,6 @@ data class RecognizedItem(
     val rawText: String = "",
     val isSelected: Boolean = true,
     val isEdited: Boolean = false,
+    val confidence: Float = 1.0f,
     val candidates: List<String> = emptyList()
 )

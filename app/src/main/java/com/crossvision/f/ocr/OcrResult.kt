@@ -13,5 +13,6 @@ data class OcrResult(
     val confidence: Float,
     val maxConfidence: Float = 0f,
     val minConfidence: Float = 0f,
-    val candidates: List<String> = emptyList()
+    val candidates: List<String> = emptyList(),
+    val polygon: FloatArray? = null
 )

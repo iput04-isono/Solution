@@ -136,9 +136,80 @@ class OcrEngine(private val context: Context) {
             val cropped  = perspectiveCrop(bitmap, poly)
             val enhanced = enhanceContrast(cropped)
             val result   = recognizeBestOrientationParallel(enhanced)
-            if (result.confidence >= CONFIDENCE_THRESHOLD) results.add(result)
+            if (result.confidence >= CONFIDENCE_THRESHOLD) {
+                // 多角形座標を保持させる
+                results.add(result.copy(polygon = poly))
+            }
         }
         return results
+    }
+
+    /**
+     * プロトタイプ統合機能: 認識結果と「枠描き済み画像」を同時に生成して返す。
+     * 信頼度に応じて枠の色を動的に変更（緑・黄・赤）。
+     *
+     * @param  bitmap 元の撮影画像
+     * @return 枠描き済みBitmapと認識結果リストのペア
+     */
+    fun runOcrPolygonWithOverlay(bitmap: Bitmap): Pair<Bitmap, List<OcrResult>> {
+        val results = runOcrPolygon(bitmap)
+        val overlayBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+        val canvas = Canvas(overlayBitmap)
+        
+        results.forEach { res ->
+            res.polygon?.let { poly ->
+                drawResultOverlay(canvas, poly, res.confidence, res.text)
+            }
+        }
+        
+        return Pair(overlayBitmap, results)
+    }
+
+    /**
+     * 画像上に認識結果の枠とテキストを描画する（プロトタイプ準拠）
+     */
+    private fun drawResultOverlay(canvas: Canvas, poly: FloatArray, confidence: Float, text: String) {
+        val paint = Paint().apply {
+            color = confidenceColor(confidence)
+            style = Paint.Style.STROKE
+            strokeWidth = 6f
+            isAntiAlias = true
+        }
+
+        val path = Path().apply {
+            moveTo(poly[0], poly[1])
+            lineTo(poly[2], poly[3])
+            lineTo(poly[4], poly[5])
+            lineTo(poly[6], poly[7])
+            close()
+        }
+        canvas.drawPath(path, paint)
+        
+        // 塗りつぶし（半透明）
+        paint.style = Paint.Style.FILL
+        paint.alpha = 30
+        canvas.drawPath(path, paint)
+
+        // 信頼度表示用テキスト（デバッグ・確認用）
+        val textPaint = Paint().apply {
+            color = Color.WHITE
+            textSize = 32f
+            typeface = Typeface.DEFAULT_BOLD
+            setShadowLayer(4f, 0f, 0f, Color.BLACK)
+        }
+        // 文字の左上に小さく表示
+        canvas.drawText("${(confidence * 100).toInt()}%", poly[0], poly[1] - 10, textPaint)
+    }
+
+    /**
+     * 信頼度に応じた表示色を決定する（プロトタイプ準拠）
+     */
+    private fun confidenceColor(confidence: Float): Int {
+        return when {
+            confidence >= 0.85f -> Color.GREEN  // 高精度
+            confidence >= 0.60f -> Color.YELLOW // 確認推奨
+            else -> Color.RED                   // 再読み取り推奨
+        }
     }
 
     /** リソースを解放する。使い終わったら必ず呼ぶ。 */
