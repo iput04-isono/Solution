@@ -2,6 +2,7 @@ package com.example.mainproject.ocr
 
 import android.content.Context
 import android.graphics.*
+import android.graphics.Path
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
@@ -41,23 +42,25 @@ import kotlin.math.*
  *   ppocr_rec.onnx テキスト認識モデル（PP-OCRv4 mobile rec + SVTR）
  *   dict.txt       認識文字辞書
  */
-class OcrEngine(private val context: Context) {
+/**
+ * @param labelMatcher  渡すと向き選択にラベル距離を使う（省略時は信頼度で判定）
+ */
+class OcrEngine(
+    private val context: Context,
+    private val labelMatcher: LabelMatcher? = null
+) {
 
     companion object {
-        /** この信頼度未満の認識結果は誤検出とみなして除外する */
         private const val CONFIDENCE_THRESHOLD = 0.15f
-
-        /** この信頼度未満なら逆向きも試して良い方を採用する */
-        private const val RETRY_THRESHOLD = 0.30f
-
-        /** 検出モデルへの入力解像度 */
-        private const val DET_SIZE = 640
-
-        /** 1枚の画像で処理する多角形領域の上限 */
-        private const val MAX_REGIONS = 8
-
-        /** 認識モデルへの入力幅の上限（推論時間を制限） */
-        private const val MAX_REC_WIDTH = 640
+        private const val RETRY_THRESHOLD      = 0.30f
+        private const val DET_SIZE             = 640
+        private const val MAX_REGIONS          = 12   // 8 → 12
+        private const val MAX_REC_WIDTH        = 640
+        // 多角形検出チューニング値
+        private const val DET_THRESHOLD        = 0.28f  // 0.38 → 0.28
+        private const val BFS_MIN_PX           = 25     // 60  → 25
+        private const val MIN_POLY_AREA        = 100f   // 300 → 100
+        private const val UNCLIP_RATIO         = 2.0f   // 1.5 → 2.0
     }
 
     private val env = OrtEnvironment.getEnvironment()
@@ -122,16 +125,10 @@ class OcrEngine(private val context: Context) {
 
     /**
      * 多角形検出によるOCR。斜め文字・歪んだ文字列に対してより高精度。
-     *
-     * BFS連結成分 + PCA最小外接矩形 + 透視変換クロップ + 並列認識。
-     *
-     * @param  bitmap 前処理済み画像（ImagePreprocessor.preprocess() の出力）
-     * @return 認識結果リスト（信頼度 CONFIDENCE_THRESHOLD 以上のもの）
      */
     fun runOcrPolygon(bitmap: Bitmap): List<OcrResult> {
         val polygons = detectTextPolygon(bitmap)
         val results  = mutableListOf<OcrResult>()
-
         for (poly in polygons) {
             val cropped  = perspectiveCrop(bitmap, poly)
             val enhanced = enhanceContrast(cropped)
@@ -139,6 +136,62 @@ class OcrEngine(private val context: Context) {
             if (result.confidence >= CONFIDENCE_THRESHOLD) results.add(result)
         }
         return results
+    }
+
+    /**
+     * 多角形検出 + 認識領域を色付き枠でオーバーレイ描画した Bitmap を同時に返す。
+     * 緑(信頼度≥0.7) / 黄(≥0.4) / 赤(<0.4) で枠の色を変える。
+     *
+     * @return Pair(オーバーレイ画像, 認識結果リスト)
+     */
+    fun runOcrPolygonWithOverlay(bitmap: Bitmap): Pair<Bitmap, List<OcrResult>> {
+        val polygons = detectTextPolygon(bitmap)
+        val results  = mutableListOf<OcrResult>()
+
+        // オーバーレイ用にコピーして Canvas を張る
+        val overlay = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+        val canvas  = Canvas(overlay)
+        val paint   = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style       = Paint.Style.STROKE
+            strokeWidth = 3f
+        }
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = 28f
+            isFakeBoldText = true
+        }
+
+        for ((idx, poly) in polygons.withIndex()) {
+            val cropped  = perspectiveCrop(bitmap, poly)
+            val enhanced = enhanceContrast(cropped)
+            val result   = recognizeBestOrientationParallel(enhanced)
+            if (result.confidence >= CONFIDENCE_THRESHOLD) results.add(result)
+
+            // 枠色：信頼度で切り替え
+            val color = when {
+                result.confidence >= 0.7f -> Color.GREEN
+                result.confidence >= 0.4f -> Color.YELLOW
+                else                      -> Color.RED
+            }
+            paint.color = color
+
+            // 多角形を描画
+            val path = Path().apply {
+                moveTo(poly[0], poly[1])
+                for (i in 1 until poly.size / 2) lineTo(poly[i * 2], poly[i * 2 + 1])
+                close()
+            }
+            canvas.drawPath(path, paint)
+
+            // 番号バッジ
+            val badgeX = poly[0]
+            val badgeY = (poly[1] - 4f).coerceAtLeast(30f)
+            textPaint.color = Color.BLACK
+            canvas.drawText("${idx + 1}", badgeX + 1f, badgeY + 1f, textPaint)
+            textPaint.color = color
+            canvas.drawText("${idx + 1}", badgeX,      badgeY,      textPaint)
+        }
+
+        return Pair(overlay, results)
     }
 
     /** リソースを解放する。使い終わったら必ず呼ぶ。 */
@@ -170,9 +223,8 @@ class OcrEngine(private val context: Context) {
     }
 
     /**
-     * 多角形検出用: 正向き・逆向きを recPool の2スレッドで並列推論し、
-     * 確信度の高い方を返す。
-     * OrtSession.run() はスレッドセーフ（ONNX Runtime 1.8+）。
+     * 多角形検出用: 正向き・逆向きを recPool の2スレッドで並列推論。
+     * LabelMatcher が渡されている場合はラベル距離が小さい方を優先して採用する。
      */
     private fun recognizeBestOrientationParallel(bitmap: Bitmap): OcrResult {
         val isVertical = bitmap.height > bitmap.width * 1.2f
@@ -185,11 +237,16 @@ class OcrEngine(private val context: Context) {
         val futureB: Future<OcrResult> = recPool.submit<OcrResult> { recognize(bitmapB) }
 
         val resultA = futureA.get()
-        if (resultA.confidence >= RETRY_THRESHOLD) {
-            futureB.get() // プールスレッドを解放するため wait
-            return resultA
-        }
         val resultB = futureB.get()
+
+        // LabelMatcher がある場合はラベル距離で選択
+        val matcher = labelMatcher
+        if (matcher != null) {
+            val distA = matcher.findBest(resultA.text)?.second ?: Int.MAX_VALUE
+            val distB = matcher.findBest(resultB.text)?.second ?: Int.MAX_VALUE
+            if (distA != distB) return if (distA < distB) resultA else resultB
+        }
+        // 距離が同じか LabelMatcher なし → 信頼度で選択
         return if (resultB.confidence > resultA.confidence) resultB else resultA
     }
 
@@ -313,13 +370,13 @@ class OcrEngine(private val context: Context) {
         val scaleX  = bitmap.width.toFloat()  / DET_SIZE
         val scaleY  = bitmap.height.toFloat() / DET_SIZE
 
-        return bfsComponents(heatMap, threshold = 0.38f, minPx = 60)
+        return bfsComponents(heatMap, threshold = DET_THRESHOLD, minPx = BFS_MIN_PX)
             .mapNotNull { comp ->
                 val rr = pcaMinRect(comp) ?: return@mapNotNull null
-                val corners = unclipRect(rr, ratio = 1.5f)
+                val corners = unclipRect(rr, ratio = UNCLIP_RATIO)
                 FloatArray(8) { i -> if (i % 2 == 0) corners[i] * scaleX else corners[i] * scaleY }
             }
-            .filter { polygonArea(it) > 300f }
+            .filter { polygonArea(it) > MIN_POLY_AREA }
             .sortedByDescending { polygonArea(it) }
             .take(MAX_REGIONS)
     }

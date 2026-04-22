@@ -67,4 +67,7 @@ dependencies {
 
     // PaddleOCR（ONNX Runtime）
     implementation(libs.onnxruntime.android)
+
+    // EXIF情報の読み取り（カメラ画像の回転補正）
+    implementation(libs.androidx.exifinterface)
 }

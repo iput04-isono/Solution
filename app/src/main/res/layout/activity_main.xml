@@ -74,15 +74,35 @@
 
         </LinearLayout>
 
-        <!-- 画像プレビュー -->
+        <!-- 画像プレビュー（撮影・選択した元画像） -->
         <ImageView
             android:id="@+id/imagePreview"
             android:layout_width="match_parent"
             android:layout_height="200dp"
             android:scaleType="centerInside"
             android:background="#EEEEEE"
-            android:layout_marginBottom="12dp"
+            android:layout_marginBottom="4dp"
             android:contentDescription="画像プレビュー" />
+
+        <!-- 認識領域オーバーレイ画像（検出した文字領域を色枠で表示） -->
+        <TextView
+            android:id="@+id/overlayLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="認識領域の確認"
+            android:textSize="12sp"
+            android:textColor="#666666"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/overlayImage"
+            android:layout_width="match_parent"
+            android:layout_height="200dp"
+            android:scaleType="centerInside"
+            android:background="#111111"
+            android:layout_marginBottom="12dp"
+            android:visibility="gone"
+            android:contentDescription="認識領域オーバーレイ" />
 
         <!-- プログレスバー -->
         <ProgressBar
@@ -93,16 +113,45 @@
             android:visibility="gone"
             android:layout_marginBottom="8dp" />
 
-        <!-- OCR結果 -->
+        <!-- 登録候補（ラベル距離 ≤ 3） -->
         <TextView
             android:id="@+id/ocrResultText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="カメラまたはギャラリーから画像を選択してください"
             android:textSize="14sp"
-            android:layout_marginBottom="12dp"
+            android:layout_marginBottom="8dp"
             android:padding="8dp"
             android:background="#F5F5F5" />
+
+        <!-- マッチなし枠（ラベル距離 > 3 の参考表示） -->
+        <LinearLayout
+            android:id="@+id/unmatchedSection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="8dp"
+            android:layout_marginBottom="8dp"
+            android:background="#FFF3CD"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="参考：正解ラベルと一致しなかった認識結果（登録されません）"
+                android:textSize="11sp"
+                android:textColor="#856404"
+                android:textStyle="bold"
+                android:paddingBottom="4dp" />
+
+            <TextView
+                android:id="@+id/unmatchedText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textColor="#495057" />
+
+        </LinearLayout>
 
         <!-- 保存ボタン -->
         <Button
