@@ -1,5 +1,6 @@
 package com.crossvision.f.ui.register
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.LinearLayout
@@ -120,7 +121,12 @@ class RegisterActivity : AppCompatActivity() {
 
     private fun showSuccessMessage(message: String) {
         Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG)
-            .setAction("OK") { finish() }
+            .setAction("OK") {
+                val intent = Intent(this, com.crossvision.f.ui.process.ProcessSelectionActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                startActivity(intent)
+                finish()
+            }
             .show()
     }
 }
