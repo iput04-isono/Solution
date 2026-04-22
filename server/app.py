@@ -231,38 +231,41 @@ class DiscoveryServer:
         self.service_info = None
 
     def start(self):
-        # サービスの登録情報を定義
-        hostname = socket.gethostname()
         try:
-            # 外部と通信可能な自IPを取得
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            local_ip = s.getsockname()[0]
-            s.close()
-        except Exception:
-            local_ip = socket.gethostbyname(hostname)
+            # サービスの登録情報を定義
+            hostname = socket.gethostname()
+            try:
+                # 外部と通信可能な自IPを取得
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                local_ip = s.getsockname()[0]
+                s.close()
+            except Exception:
+                local_ip = socket.gethostbyname(hostname)
 
-        # サービスタイプ: _crossvision._tcp.local.
-        desc = {"version": "1.0", "name": "CrossVision-F-Server"}
-        self.service_info = ServiceInfo(
-            "_crossvision._tcp.local.",
-            f"SevenStarServer.{hostname}._crossvision._tcp.local.",
-            addresses=[socket.inet_aton(local_ip)],
-            port=self.port,
-            properties=desc,
-            server=f"{hostname}.local.",
-        )
-        
-        print(f"[*] 自動発見サービスを開始: {local_ip}:{self.port}")
-        self.zeroconf.register_service(self.service_info)
+            # サービスタイプ: _crossvision._tcp.local.
+            desc = {"version": "1.0", "name": "CrossVision-F-Server"}
+            self.service_info = ServiceInfo(
+                "_crossvision._tcp.local.",
+                f"SevenStarServer.{hostname}._crossvision._tcp.local.",
+                addresses=[socket.inet_aton(local_ip)],
+                port=self.port,
+                properties=desc,
+                server=f"{hostname}.local.",
+            )
+            
+            print(f"[*] 自動発見サービスを開始: {local_ip}:{self.port}")
+            self.zeroconf.register_service(self.service_info)
+        except Exception as e:
+            print(f"[!] 自動発見サービスの開始に失敗しました (無視して続行します): {e}")
 
     def stop(self):
-        if self.service_info:
-            try:
+        try:
+            if self.service_info:
                 self.zeroconf.unregister_service(self.service_info)
-            except:
-                pass
-        self.zeroconf.close()
+            self.zeroconf.close()
+        except:
+            pass
 
 # ──────────────────────────────────────────────────
 # 起動
