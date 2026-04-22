@@ -19,6 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "main project"
+rootProject.name = "CrossVisionF"
 include(":app")
- 

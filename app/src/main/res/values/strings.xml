@@ -1,3 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">main project</string>
+    <!-- アプリ名 -->
+    <string name="app_name">Cross Vision F</string>
+
+    <!-- 共通 -->
+    <string name="btn_next">次へ</string>
+    <string name="btn_back">戻る</string>
+    <string name="btn_cancel">キャンセル</string>
+    <string name="btn_ok">OK</string>
+    <string name="btn_save">保存</string>
+    <string name="btn_delete">削除</string>
+    <string name="btn_edit">編集</string>
+    <string name="btn_confirm">確定</string>
+    <string name="btn_retry">再試行</string>
+    <string name="loading">読み込み中...</string>
+
+    <!-- ログイン画面 -->
+    <string name="login_title">ログイン</string>
+    <string name="login_user_id">ユーザーID</string>
+    <string name="login_password">パスワード</string>
+    <string name="login_button">ログイン</string>
+    <string name="login_error">ユーザーIDもしくはパスワードが違います</string>
+    <string name="login_empty_fields">ユーザーIDとパスワードを入力してください</string>
+    <string name="login_empty_user_id">ユーザーIDを入力してください</string>
+    <string name="login_empty_password">パスワードを入力してください</string>
+
+    <!-- 工事・工程選択画面 -->
+    <string name="process_selection_title">工事・工程選択</string>
+    <string name="construction_label">工事名</string>
+    <string name="process_label">工程名</string>
+    <string name="construction_hint">工事を選択してください</string>
+    <string name="process_hint">工程を選択してください</string>
+    <string name="select_construction_first">先に工事を選択してください</string>
+    <string name="category_product">製品</string>
+    <string name="category_part">部品</string>
+    <string name="category_warehouse">置き場</string>
+
+    <!-- 画像認識画面 -->
+    <string name="recognize_title">画像認識</string>
+    <string name="btn_camera">カメラで撮影</string>
+    <string name="btn_gallery">ギャラリーから選択</string>
+    <string name="recognize_instruction">カメラで撮影するか、ギャラリーから画像を選択してください</string>
+
+    <!-- カメラ画面 -->
+    <string name="camera_title">撮影</string>
+    <string name="camera_permission_required">カメラの使用許可が必要です</string>
+    <string name="camera_permission_denied">カメラの使用が許可されていません。設定から許可してください。</string>
+
+    <!-- 認識結果確認画面 -->
+    <string name="confirm_title">認識結果確認</string>
+    <string name="confirm_no_results">製品コードが認識されませんでした</string>
+    <string name="confirm_results_count">%d件の製品コードを認識しました</string>
+    <string name="confirm_edit_dialog_title">製品コードを編集</string>
+    <string name="confirm_delete_dialog_title">削除確認</string>
+    <string name="confirm_delete_dialog_message">この製品コードを削除しますか？</string>
+    <string name="confirm_add_manual">手動で追加</string>
+    <string name="confirm_register_selected">選択した製品を登録</string>
+
+    <!-- 登録画面 -->
+    <string name="register_title">登録</string>
+    <string name="register_product_code">製品コード</string>
+    <string name="register_construction_name">工事名</string>
+    <string name="register_process_name">工程名</string>
+    <string name="register_warehouse_no">倉庫No</string>
+    <string name="register_column_no">列No</string>
+    <string name="register_tier_no">段No</string>
+    <string name="register_btn">登録</string>
+    <string name="register_success">登録が完了しました</string>
+    <string name="register_success_offline">オフラインで保存しました。オンライン復帰時に自動送信されます。</string>
+    <string name="register_error">登録に失敗しました</string>
+    <string name="register_validation_error">入力内容を確認してください</string>
+
+    <!-- 登録履歴画面 -->
+    <string name="library_title">登録履歴</string>
+    <string name="library_search_hint">製品コードまたは工事名で検索</string>
+    <string name="library_empty">登録履歴がありません</string>
+    <string name="library_sync_btn">未送信データを同期</string>
+    <string name="library_syncing">同期中...</string>
+    <string name="library_sync_complete">同期が完了しました（%d件）</string>
+    <string name="library_sync_no_data">未送信データはありません</string>
+    <string name="library_sync_no_network">ネットワークに接続されていません</string>
+
+    <!-- 同期ステータス -->
+    <string name="status_pending">未送信</string>
+    <string name="status_syncing">送信中</string>
+    <string name="status_synced">送信済み</string>
+    <string name="status_failed">送信失敗</string>
+
+    <!-- エラーメッセージ -->
+    <string name="error_general">エラーが発生しました</string>
+    <string name="error_network">ネットワークエラーが発生しました</string>
+    <string name="error_camera">カメラの起動に失敗しました</string>
 </resources>

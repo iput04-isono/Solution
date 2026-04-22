@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 共通マージン・パディング -->
+    <dimen name="spacing_xs">4dp</dimen>
+    <dimen name="spacing_sm">8dp</dimen>
+    <dimen name="spacing_md">16dp</dimen>
+    <dimen name="spacing_lg">24dp</dimen>
+    <dimen name="spacing_xl">32dp</dimen>
+
+    <!-- ボタンの高さ -->
+    <dimen name="button_height">48dp</dimen>
+    <dimen name="button_height_large">56dp</dimen>
+
+    <!-- テキストサイズ -->
+    <dimen name="text_title">24sp</dimen>
+    <dimen name="text_subtitle">18sp</dimen>
+    <dimen name="text_body">16sp</dimen>
+    <dimen name="text_caption">14sp</dimen>
+    <dimen name="text_small">12sp</dimen>
+
+    <!-- ツールバー -->
+    <dimen name="toolbar_height">56dp</dimen>
+
+    <!-- カードの角丸 -->
+    <dimen name="card_corner_radius">12dp</dimen>
+
+    <!-- 入力フィールドの角丸 -->
+    <dimen name="input_corner_radius">8dp</dimen>
+
+    <!-- カメラボタンのサイズ -->
+    <dimen name="camera_button_size">72dp</dimen>
+    <dimen name="camera_button_inner_size">60dp</dimen>
+</resources>
