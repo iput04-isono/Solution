@@ -23,7 +23,7 @@ object RetrofitClient {
      * 実機テスト時: PC の IPv4 アドレス（例: http://192.168.1.10:5000）
      * エミュレーター使用時: http://10.0.2.2:5000
      */
-    var serverBaseUrl: String = "http://192.168.1.100:5000"
+    var serverBaseUrl: String = "http://10.205.109.163:5000"
         set(value) {
             field = value
             // URL変更時にインスタンスをリセット
