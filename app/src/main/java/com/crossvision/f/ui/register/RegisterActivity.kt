@@ -100,12 +100,12 @@ class RegisterActivity : AppCompatActivity() {
 
                 repository.insertRegistrations(registrations)
 
-                // オンラインなら即座に同期を試行
+                // 通信状態に応じたメッセージの出し分け
                 if (isOnline) {
                     SyncWorker.executeImmediateSync(applicationContext)
-                    showSuccessMessage("登録が完了しました（${productCodes.size}件）")
+                    showSuccessMessage("サーバーへの送信を開始しました（${productCodes.size}件）\n同期状況は履歴から確認できます")
                 } else {
-                    showSuccessMessage("オフラインで保存しました（${productCodes.size}件）\nオンライン復帰時に自動送信されます")
+                    showSuccessMessage("オフラインで保存しました（${productCodes.size}件）\nネットワーク復帰時に自動で送信されます")
                 }
 
             } catch (e: Exception) {

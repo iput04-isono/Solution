@@ -68,15 +68,25 @@ class RecognizeActivity : AppCompatActivity() {
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { imageUri ->
-            try {
-                val inputStream = contentResolver.openInputStream(imageUri)
-                val bitmap = BitmapFactory.decodeStream(inputStream)
-                inputStream?.close()
-                if (bitmap != null) {
-                    setPreviewImage(bitmap)
+            lifecycleScope.launch {
+                try {
+                    val inputStream = contentResolver.openInputStream(imageUri)
+                    val bitmap = BitmapFactory.decodeStream(inputStream)
+                    inputStream?.close()
+                    
+                    if (bitmap != null) {
+                        // 一時ファイルとして保存してパスを取得
+                        val tempFile = File(cacheDir, "temp_gallery_image.jpg")
+                        tempFile.outputStream().use { out ->
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                        }
+                        lastImagePath = tempFile.absolutePath
+                        
+                        setPreviewImage(bitmap)
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(this@RecognizeActivity, "画像の読み込みに失敗しました", Toast.LENGTH_SHORT).show()
                 }
-            } catch (e: Exception) {
-                Toast.makeText(this, "画像の読み込みに失敗しました", Toast.LENGTH_SHORT).show()
             }
         }
     }
