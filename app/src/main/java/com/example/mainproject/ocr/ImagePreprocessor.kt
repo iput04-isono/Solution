@@ -40,6 +40,6 @@ class ImagePreprocessor {
 
     companion object {
         /** 処理する画像の最大長辺サイズ（px） */
-        const val MAX_SIZE = 960
+        const val MAX_SIZE = 1280
     }
 }

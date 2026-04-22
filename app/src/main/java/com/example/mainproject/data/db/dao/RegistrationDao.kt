@@ -27,8 +27,8 @@ interface RegistrationDao {
     @Insert
     suspend fun insertItems(items: List<PendingRegistrationItem>)
 
-    // 同期待ちデータを取得（WorkManagerが使う）
-    @Query("SELECT * FROM pending_registrations WHERE sync_status = 'pending'")
+    // 同期待ちデータを取得（pending + 3回未満のfailedも対象）
+    @Query("SELECT * FROM pending_registrations WHERE sync_status IN ('pending', 'failed') AND retry_count < 3")
     suspend fun getPendingRegistrations(): List<PendingRegistration>
 
     // 同期ステータスを更新

@@ -53,6 +53,18 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
-    // PaddleOCR（ONNX Runtime）- OCRエンジン用
+    // WorkManager
+    implementation(libs.workmanager.runtime.ktx)
+
+    // Coroutines
+    implementation(libs.coroutines.android)
+
+    // Retrofit + OkHttp
+    implementation(libs.retrofit.core)
+    implementation(libs.retrofit.gson)
+    implementation(libs.okhttp.core)
+    implementation(libs.okhttp.logging)
+
+    // PaddleOCR（ONNX Runtime）
     implementation(libs.onnxruntime.android)
 }
