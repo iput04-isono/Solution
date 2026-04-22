@@ -103,23 +103,38 @@ class RecognizedProductAdapter(
             binding.cbSelect.isChecked = item.isSelected
 
             binding.cbSelect.setOnCheckedChangeListener { _, isChecked ->
-                if (position in items.indices) {
-                    items[position] = items[position].copy(isSelected = isChecked)
-                    onSelectionChanged(position, isChecked)
+                val currentPos = bindingAdapterPosition
+                if (currentPos != RecyclerView.NO_POSITION && currentPos in items.indices) {
+                    items[currentPos] = items[currentPos].copy(isSelected = isChecked)
+                    onSelectionChanged(currentPos, isChecked)
                 }
             }
 
             // 製品コードタップで候補を表示
             binding.tvProductCode.setOnClickListener {
-                if (item.candidates.isNotEmpty()) {
-                    showCandidatesMenu(it, item.candidates, position)
-                } else {
-                    onEditClick(position)
+                val currentPos = bindingAdapterPosition
+                if (currentPos != RecyclerView.NO_POSITION && currentPos in items.indices) {
+                    val currentItem = items[currentPos]
+                    if (currentItem.candidates.isNotEmpty()) {
+                        showCandidatesMenu(it, currentItem.candidates, currentPos)
+                    } else {
+                        onEditClick(currentPos)
+                    }
                 }
             }
 
-            binding.btnEdit.setOnClickListener { onEditClick(position) }
-            binding.btnDelete.setOnClickListener { onDeleteClick(position) }
+            binding.btnEdit.setOnClickListener {
+                val currentPos = bindingAdapterPosition
+                if (currentPos != RecyclerView.NO_POSITION) {
+                    onEditClick(currentPos)
+                }
+            }
+            binding.btnDelete.setOnClickListener {
+                val currentPos = bindingAdapterPosition
+                if (currentPos != RecyclerView.NO_POSITION) {
+                    onDeleteClick(currentPos)
+                }
+            }
         }
 
         private fun showCandidatesMenu(view: android.view.View, candidates: List<String>, position: Int) {

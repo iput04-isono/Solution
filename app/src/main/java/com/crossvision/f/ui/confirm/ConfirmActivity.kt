@@ -109,7 +109,10 @@ class ConfirmActivity : AppCompatActivity() {
     }
 
     private fun showEditDialog(position: Int) {
-        val currentItem = adapter.getItems()[position]
+        val items = adapter.getItems()
+        if (position !in items.indices) return
+        
+        val currentItem = items[position]
         val editText = EditText(this).apply {
             setText(currentItem.productCode)
             setPadding(48, 32, 48, 32)
@@ -136,13 +139,15 @@ class ConfirmActivity : AppCompatActivity() {
     }
 
     private fun showDeleteDialog(position: Int) {
+        val items = adapter.getItems()
+        if (position !in items.indices) return
+        
         AlertDialog.Builder(this)
-            .setTitle("削除確認")
-            .setMessage("この製品コードを削除しますか？")
+            .setTitle("項目を削除")
+            .setMessage("この項目をリストから削除しますか？")
             .setPositiveButton("削除") { _, _ ->
                 adapter.removeItem(position)
-                updateResultCount()
-                updateEmptyState()
+                updateRegisterButton()
             }
             .setNegativeButton("キャンセル", null)
             .show()
