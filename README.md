@@ -95,8 +95,8 @@ graph TD
 
 ### 1. リポジトリの取得
 ```bash
-git clone https://github.com/iput04-isono/sevenstar.git
-cd sevenstar
+git clone https://github.com/iput04-isono/Solution.git
+cd Solution
 ```
 
 ### 2. PC サーバーの起動
