@@ -69,29 +69,43 @@ graph LR
 
 ## セットアップ
 
-### 1. PC サーバー側 (Python) の起動
+### 1. PC サーバー側 (Python / Flask) の起動
 
-1. Python がインストールされていることを確認
-2. サーバーディレクトリへ移動し、ライブラリをインストール
-   ```bash
-   cd server
-   pip install -r requirements.txt
-   ```
-3. サーバーを起動
-   ```bash
-   python app.py
-   ```
-   - 管理画面: `http://localhost:5000/admin`
-   - API 端点: `http://[PCのIP]:5000/api/registrations`
+現場にインターネット環境がなくても、同一 LAN 内（WiFi等）に PC と Android 端末があれば動作します。
+
+#### ① 必要なライブラリのインストール (初回のみ)
+PC のターミナルで `server` フォルダへ移動し、以下のコマンドを実行します。
+```bash
+cd server
+pip install -r requirements.txt
+```
+
+#### ② サーバーの起動
+以下のコマンドを実行します。
+```bash
+python app.py
+```
+起動が成功すると、以下のようなメッセージが表示されます。
+```text
+==================================================
+CrossVision F 管理サーバー 起動中
+管理画面: http://localhost:5000/admin
+==================================================
+```
+
+#### ③ 管理画面の確認
+PC のブラウザで `http://localhost:5000/admin` を開きます。
+> **注意**: 完全にインターネットがない（オフライン）状態では、管理画面の Bootstrap (デザイン部品) が読み込まれず、見た目が崩れることがありますが、データの閲覧や削除・CSV出力などの基本機能は動作します。
 
 ### 2. Android アプリ側の設定
 
 1. `app/src/main/java/com/crossvision/f/data/api/RetrofitClient.kt` を開きます。
-2. `serverBaseUrl` を PC の IPv4 アドレス（`ipconfig` 等で確認）に書き換えてください。
+2. `serverBaseUrl` を PC の IPv4 アドレスに書き換えてください。
+   - **PC の IP 確認方法**: Windows ならコマンドプロンプトで `ipconfig` を実行し `IPv4 アドレス` の数値を確認します。
    ```kotlin
-   var serverBaseUrl: String = "http://192.168.x.x:5000" // PCのIP
+   var serverBaseUrl: String = "http://192.168.x.x:5000" // ここにPCのIPを入れる
    ```
-3. Android Studio でプロジェクトをビルド・実行してください。
+3. Android Studio でプロジェクトを実行（Run）してください。
 
 ---
 
