@@ -40,7 +40,7 @@ db = SQLAlchemy(app)
 # ──────────────────────────────────────────────────
 # セキュリティ設定 (APIキー)
 # ──────────────────────────────────────────────────
-SYNC_API_KEY = "SEVEN_STAR_SYNC_KEY_2024"
+SYNC_API_KEY = "cvf_7s_9922_zrkp_8x11"
 
 def require_api_key(f):
     @wraps(f)

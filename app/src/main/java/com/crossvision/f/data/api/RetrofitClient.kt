@@ -34,7 +34,7 @@ object RetrofitClient {
     private var _retrofit: Retrofit? = null
     private var _apiService: ApiService? = null
 
-    private const val SYNC_API_KEY = "SEVEN_STAR_SYNC_KEY_2024"
+    private const val SYNC_API_KEY = "cvf_7s_9922_zrkp_8x11"
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
