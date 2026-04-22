@@ -1,30 +1,30 @@
 # Cross Vision F
 
-**鉄骨工程管理 Android アプリケーション & PC 管理システム**
+**鉄骨工程管理 Android アプリケーション & PC サーバーシステム**
 
 Cross Vision F は、鉄骨加工現場の工程管理をデジタル化し、データの正確性とリアルタイム性を極限まで高めたソリューションです。
-自社開発のオンデバイス OCR と、ネットワーク環境に左右されない高度な同期システムを組み合わせ、現場での「記録」と事務所での「管理」をシームレスに繋ぎます。
+自社開発のオンデバイス OCR（PaddleOCR 改良版）と、ネットワーク環境に左右されない高度な同期システムを組み合わせ、現場での「記録」と事務所での「管理」をシームレスに繋ぎます。
 
 ---
 
 ## 🚀 主要機能
 
-### 📝 オンデバイス OCR ＆ スマート候補選択
+### 📝 オンデバイス OCR ＆ 視覚的フィードバック
 スマートフォンのカメラで製品番号をスキャン。デバイス内で完結するため、インターネット環境が不安定な現場でも瞬時に読み取ります。
-- **画像プレビュー**: 確認画面で撮影画像を常時表示。文字と現物をその場で突き合わせ可能。
-- **候補選択 (N-best candidates)**: AI が認識に迷った際、信頼度順に候補を提示。製品コードをタップするだけで候補リストからワンタップで修正できます。
+- **オーバーレイ表示**: 認識した文字の領域を画像上にポリゴン（多角形）で描画。
+- **信頼度別色分け**: 精度に応じて 緑（高）、黄（中）、赤（低）で色分け表示し、確認ミスを防止。
+- **上下逆さま認識**: 鉄骨の向きに関わらず、180度回転した状態でも自動判定して正しく認識。
 
 ### 📡 インテリジェント自動同期 (ZeroTouch Sync)
 **mDNS (Multicast DNS)** と **WorkManager** を活用し、ユーザーが意識することなくデータをサーバーへ送り届けます。
-- **ネットワーク検知型同期**: 履歴画面を開いている最中に通信が回復すると、自動的にサーバーを探索して未送信データを送信。
-- **サーバー自動発見**: PC と WiFi が繋がれば、IP アドレスの設定なしで自動的に PC サーバーを発見・接続します。
-- **オフライン完全対応**: 電波がない場所ではローカル DB (Room) に保存。繋がったタイミングでバックグラウンド送信します。
+- **サーバー自動発見 (NSD)**: PC と WiFi が繋がれば、IP アドレスの設定なしで自動的に PC サーバーを発見・接続します。
+- **バックグラウンド自動送信**: 15分間隔で未送信データをチェックし、通信回復時に自動で送信を実行。
+- **詳細ステータス報告**: 送信時、単なる成否だけでなく「サーバー接続中」「サーバー不在のため予約」など、現在の状況を正確にユーザーへ伝えます。
 
-### 📋 現場最適化 UI (ver 2.0 準拠)
-操作ミスを減らし、現場のスピードを落とさないための設計。
-- **ワンタッチ操作**: 工程選択から登録まで、最小限のタップ数で完了。
-- **状態の可視化**: 通信状態や同期の進捗をステータスバーで詳細に報告。
-- **自動ナビゲーション**: 登録完了後は自動的にホーム画面に戻り、次の作業へスムーズに移行。
+### 📋 現場最適化 UI
+操作ミスを減らし、スピードを落とさないための作業員向け設計。
+- **カテゴリ切替**: 製品と部品をワンステップで切り替え。
+- **動的候補リスト**: 認識結果が曖昧な場合、マスターデータから近い候補を提示し、タップ操作で修正が可能。
 
 ---
 
@@ -33,73 +33,85 @@ Cross Vision F は、鉄骨加工現場の工程管理をデジタル化し、�
 ```mermaid
 graph TD
     subgraph "現場 (Android App)"
-        App[Cross Vision F]
-        OCR[PaddleOCR/ONNX]
-        Room[(Room DB)]
-        Sync[Auto Sync Manager]
+        App["Cross Vision F"]
+        OCR["PaddleOCR (ONNX)"]
+        Room["(Local DB)"]
+        SyncMgr["Sync Manager"]
     end
     
     subgraph "事務所 (Local PC)"
-        Server[Flask Server]
-        Admin[Web Admin UI]
-        SQLite[(SQLite DB)]
-        Discovery[NSD Service]
+        Server["Flask Server"]
+        Admin["Web Admin UI"]
+        DB["(SQLite DB)"]
+        NSD["NSD Service"]
     end
 
-    App -- "X-API-KEY 認証" --> Server
-    Sync -- "通信回復を検知" --- App
-    OCR -- "認識結果 ＋ 候補" --> App
-    App -- "自動発見" --> Discovery
+    App -- "NSD 自動発見" --> NSD
+    SyncMgr -- "X-API-KEY 認証" --> Server
+    OCR -- "ポリゴン描画" --> App
+    App -- "WorkManager" --> SyncMgr
     Server -- "管理/CSV出力" --> Admin
 ```
 
 ---
 
-## 💻 技術スタック
+## 📸 文字認識技術の詳細
 
-### Android (Mobile)
-- **Language**: Kotlin
-- **Architecture**: MVVM + Jetpack ViewBinding
-- **OCR Engine**: PaddleOCR (ONNX Runtime)
-- **Sync**: WorkManager + ConnectivityManager (Callback)
-- **Network**: Retrofit2 / OkHttp3 / NsdManager
-- **Database**: Room Database
+本アプリが採用している AI 文字認識（OCR）の処理フローと、各ステップで用いている技術を解説します。
 
-### Server (PC)
-- **Framework**: Python / Flask
-- **Discovery**: Zeroconf / mDNS
-- **ORM/DB**: Flask-SQLAlchemy / SQLite3
+### 1. テキスト領域検出 (DBNet)
+**DBNet (Differentiable Binarization Network)** を採用。
+- **アルゴリズム**: ニューラルネットワークが各ピクセルの「文字らしさ」を確率マップとして出力。
+- **多角形抽出**: 単なる四角形ではなく、斜めや歪みに強い多角形（ポリゴン）として領域を特定。
+- **Perspective Crop**: 検出した多角形の頂点を射影変換で長方形に補正し、認識モデルへ渡すことで精度を最大化。
 
----
+### 2. 文字認識 (SVTR)
+**SVTR (Single Visual model for scene Text Recognition)** を採用。
+- **180度回転対応**: 各領域に対して「正立」と「180度回転」の両パターンを並列で認識し、マスターデータに近い方を自動採用。鉄骨の置かれ方に左右されない認識を実現。
 
-## 🚀 セットアップと実行
-
-### 1. 事務所側 (PC サーバー)
-1. Python がインストールされていることを確認。
-2. `server` ディレクトリで依存関係をインストール。
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. サーバーを起動。
-   ```bash
-   python app.py
-   ```
-
-### 2. 現場側 (Android アプリ)
-1. Android Studio でビルドし、実機へインストール。
-2. PC と同じネットワーク (WiFi) に接続。
-3. ログイン後、工程を選択して撮影を開始するだけで、データは自動的に PC へ同期されます。
+### 3. ラベルマッチング（Levenshtein 距離）
+認識したテキストを以下のルールで評価・分類します。
+- **編集距離 (Levenshtein Distance)**: 1文字の追加・削除・置換にかかるコストを計算。
+- **バリアント生成**: 刻印で混同しやすいペア（0 と O、1 と I、8 と B など）を自動正規化。
+- **分類**:
+  - **編集距離 ≤ 3**: 「登録候補」として上位表示。
+  - **編集距離 ≥ 4**: 「参考情報」として別枠に表示。
 
 ---
 
-## 📈 今後のロードマップ
-- [x] OCR エンジンの ONNX 化による高速化
-- [x] サーバーの自動発見・自動同期の実装
-- [x] OCR エビデンス画像の表示機能
-- [x] OCR 認識候補 (Candidate) のポップアップ選択
-- [x] 通信回復時のバックグラウンド自動送信
-- [ ] 工事・工程マスターデータのサーバー同期機能
-- [ ] 画像解析による製品の「置き場」自動判定機能
+## 💻 動作確認済み環境
+
+| 項目 | バージョン / 内容 |
+| :--- | :--- |
+| **Android OS** | API 24 (7.0) 以上、推奨 API 33 以上 |
+| **Android Studio** | Koala / Ladybug 以降推奨 |
+| **Kotlin** | 1.9.24 |
+| **OCR Models** | PP-OCRv4 (det.onnx / rec.onnx) |
+| **PC Server** | Python 3.10+ / Flask 3.1.3 |
+
+---
+
+## 🚀 セットアップ手順
+
+### 1. リポジトリの取得
+```bash
+git clone https://github.com/iput04-isono/sevenstar.git
+cd sevenstar
+```
+
+### 2. PC サーバーの起動
+`server` ディレクトリに移動し、サーバーを起動します。
+```bash
+pip install -r requirements.txt
+python app.py
+```
+※ サーバーが起動すると、ネットワーク内で `SevenStarServer` という名称で自動広告が開始されます。
+
+### 3. Android アプリの実行
+1. Android Studio でプロジェクトを開き、Gradle 同期を完了させます。
+2. Android 実機を接続し、USB デバッグを有効にします。
+3. ![Run](https://img.shields.io/badge/-Run-green) ボタンでインストール。
+4. PC と同じ WiFi に接続していれば、設定不要でサーバーを自動認識します。
 
 ---
 
