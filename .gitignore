@@ -30,3 +30,12 @@ server/registrations.json
 
 # Windows
 Thumbs.db
+
+# OpenCV SDK（旧前処理デモで使用。現在は不使用）
+image-preprocessing/opencv/
+
+# テスト画像（センシティブデータ。Google Drive で共有）
+image-preprocessing/app/src/main/assets/images/
+
+# 作業用PR下書きファイル
+_pr_body*.md
