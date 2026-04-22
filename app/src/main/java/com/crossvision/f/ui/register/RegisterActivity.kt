@@ -76,17 +76,13 @@ class RegisterActivity : AppCompatActivity() {
     }
 
     private fun performRegistration() {
-        val warehouseNo = binding.etWarehouseNo.text?.toString()?.trim() ?: ""
-        val columnNo = binding.etColumnNo.text?.toString()?.trim() ?: ""
-        val tierNo = binding.etTierNo.text?.toString()?.trim() ?: ""
-
         binding.btnRegister.isEnabled = false
         binding.progressRegister.visibility = android.view.View.VISIBLE
 
         lifecycleScope.launch {
             try {
                 val isOnline = syncManager.isNetworkAvailable()
-                val initialStatus = if (isOnline) SyncStatus.PENDING else SyncStatus.PENDING
+                val initialStatus = SyncStatus.PENDING
 
                 // 各製品コードを登録
                 val registrations = productCodes.map { code ->
@@ -94,9 +90,9 @@ class RegisterActivity : AppCompatActivity() {
                         productCode = code,
                         constructionName = constructionName,
                         processName = processName,
-                        warehouseNo = warehouseNo,
-                        columnNo = columnNo,
-                        tierNo = tierNo,
+                        warehouseNo = "",
+                        columnNo = "",
+                        tierNo = "",
                         syncStatus = initialStatus,
                         userId = userId
                     )

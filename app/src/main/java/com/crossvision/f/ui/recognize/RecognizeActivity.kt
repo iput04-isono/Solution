@@ -31,6 +31,7 @@ class RecognizeActivity : AppCompatActivity() {
     private lateinit var binding: ActivityRecognizeBinding
     private lateinit var ocrProcessor: OcrProcessor
     private var currentBitmap: Bitmap? = null
+    private var lastImagePath: String? = null
     private var constructionName = ""
     private var processName = ""
     private var userId = ""
@@ -53,6 +54,7 @@ class RecognizeActivity : AppCompatActivity() {
         if (result.resultCode == RESULT_OK) {
             val imagePath = result.data?.getStringExtra("IMAGE_PATH")
             if (imagePath != null) {
+                lastImagePath = imagePath
                 val bitmap = BitmapFactory.decodeFile(imagePath)
                 if (bitmap != null) {
                     setPreviewImage(bitmap)
@@ -167,6 +169,7 @@ class RecognizeActivity : AppCompatActivity() {
             putExtra("USER_ID", userId)
             putExtra("CONSTRUCTION_NAME", constructionName)
             putExtra("PROCESS_NAME", processName)
+            putExtra("IMAGE_PATH", lastImagePath) // 画像パスを追加
             putStringArrayListExtra(
                 "PRODUCT_CODES",
                 ArrayList(results.map { it.cleanedCode })
@@ -174,6 +177,11 @@ class RecognizeActivity : AppCompatActivity() {
             putStringArrayListExtra(
                 "RAW_TEXTS",
                 ArrayList(results.map { it.rawText })
+            )
+            // 候補リストを | 区切りで渡す
+            putStringArrayListExtra(
+                "CANDIDATES",
+                ArrayList(results.map { it.candidates.joinToString("|") })
             )
         }
         startActivity(intent)

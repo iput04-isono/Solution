@@ -55,15 +55,37 @@
                     android:layout_weight="1"
                     android:text="@string/category_part" />
 
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+
+            <!-- 操作ボタン (再読み込み / ログアウト) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="@dimen/spacing_lg">
+
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnCategoryWarehouse"
+                    android:id="@+id/btnReload"
                     style="@style/Widget.Material3.Button.OutlinedButton"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="@string/category_warehouse" />
+                    android:text="@string/btn_reload"
+                    app:icon="@drawable/ic_sync"
+                    android:layout_marginEnd="@dimen/spacing_sm" />
 
-            </com.google.android.material.button.MaterialButtonToggleGroup>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnLogout"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/btn_logout"
+                    app:icon="@drawable/ic_logout"
+                    app:iconTint="@color/error"
+                    android:textColor="@color/error" />
+
+            </LinearLayout>
 
             <!-- 説明テキスト -->
             <TextView

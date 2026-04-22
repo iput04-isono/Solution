@@ -41,12 +41,18 @@ class OcrProcessor(private val context: Context) {
             val validation = ProductCodeValidator.validate(cleanedCode)
 
             if (validation.isValid) {
+                // 候補リストもクリーニングして適用
+                val cleanedCandidates = res.candidates.map { 
+                    ProductCodeValidator.cleanProductCode(it)
+                }.filter { it.isNotEmpty() && it != cleanedCode }.distinct()
+
                 ocrResults.add(
                     DomainOcrResult(
                         rawText = text,
                         cleanedCode = cleanedCode,
                         confidence = res.confidence,
-                        isValid = true
+                        isValid = true,
+                        candidates = cleanedCandidates
                     )
                 )
             }
@@ -85,5 +91,6 @@ data class DomainOcrResult(
     val rawText: String,          // OCR生テキスト
     val cleanedCode: String,      // クリーニング済み製品コード
     val confidence: Float,        // 認識信頼度
-    val isValid: Boolean          // バリデーション結果
+    val isValid: Boolean,         // バリデーション結果
+    val candidates: List<String> = emptyList() // 候補リスト
 )

@@ -28,7 +28,20 @@ class RecognizedProductAdapter(
 
     fun updateItem(position: Int, code: String) {
         if (position in items.indices) {
-            items[position] = items[position].copy(productCode = code, isEdited = true)
+            items[position] = items[position].copy(
+                productCode = code, 
+                isEdited = true
+            )
+            notifyItemChanged(position)
+        }
+    }
+
+    fun updateItemFromCandidate(position: Int, code: String) {
+        if (position in items.indices) {
+            items[position] = items[position].copy(
+                productCode = code,
+                isEdited = true
+            )
             notifyItemChanged(position)
         }
     }
@@ -64,16 +77,47 @@ class RecognizedProductAdapter(
 
         fun bind(item: RecognizedItem, position: Int) {
             binding.tvProductCode.text = item.productCode
+            
+            // 候補がある場合はアイコンを表示（または色を変える）
+            if (item.candidates.isNotEmpty() && !item.isEdited) {
+                binding.tvProductCode.setCompoundDrawablesWithIntrinsicBounds(0, 0, com.crossvision.f.R.drawable.ic_expand_more, 0)
+            } else {
+                binding.tvProductCode.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
+            }
+
             binding.tvRawText.text = if (item.isEdited) "（手動修正済み）" else "認識テキスト: ${item.rawText}"
             binding.cbSelect.isChecked = item.isSelected
 
             binding.cbSelect.setOnCheckedChangeListener { _, isChecked ->
-                items[position] = items[position].copy(isSelected = isChecked)
-                onSelectionChanged(position, isChecked)
+                if (position in items.indices) {
+                    items[position] = items[position].copy(isSelected = isChecked)
+                    onSelectionChanged(position, isChecked)
+                }
+            }
+
+            // 製品コードタップで候補を表示
+            binding.tvProductCode.setOnClickListener {
+                if (item.candidates.isNotEmpty()) {
+                    showCandidatesMenu(it, item.candidates, position)
+                } else {
+                    onEditClick(position)
+                }
             }
 
             binding.btnEdit.setOnClickListener { onEditClick(position) }
             binding.btnDelete.setOnClickListener { onDeleteClick(position) }
+        }
+
+        private fun showCandidatesMenu(view: android.view.View, candidates: List<String>, position: Int) {
+            val popup = androidx.appcompat.widget.PopupMenu(view.context, view)
+            candidates.forEachIndexed { index, s ->
+                popup.menu.add(0, index, index, s)
+            }
+            popup.setOnMenuItemClickListener { menuItem ->
+                updateItemFromCandidate(position, menuItem.title.toString())
+                true
+            }
+            popup.show()
         }
     }
 }
@@ -85,5 +129,6 @@ data class RecognizedItem(
     val productCode: String,
     val rawText: String = "",
     val isSelected: Boolean = true,
-    val isEdited: Boolean = false
+    val isEdited: Boolean = false,
+    val candidates: List<String> = emptyList()
 )

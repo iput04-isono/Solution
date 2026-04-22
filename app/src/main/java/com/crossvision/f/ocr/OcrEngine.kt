@@ -474,28 +474,78 @@ class OcrEngine(private val context: Context) {
     }
 
     private fun decode(probabilities: Array<FloatArray>): OcrResult {
+        // 第1候補（Greedy Search）
         val sb = StringBuilder()
-        var lastIdx    = -1
-        var totalScore = 0f; var count = 0
-        var maxConf    = 0f; var minConf = 1.0f
+        var lastIdx = -1
+        val confidences = mutableListOf<Float>()
+        val charPositions = mutableListOf<Int>() // 文字が確定した時の probabilities インデックス
 
-        for (probs in probabilities) {
+        for (i in probabilities.indices) {
+            val probs = probabilities[i]
             val maxIdx = probs.indices.maxByOrNull { probs[it] } ?: 0
-            val conf   = probs[maxIdx]
+            val conf = probs[maxIdx]
+            
             if (maxIdx > 0 && maxIdx != lastIdx && maxIdx < labelList.size) {
                 sb.append(labelList[maxIdx])
-                totalScore += conf; count++
-                if (conf > maxConf) maxConf = conf
-                if (conf < minConf) minConf = conf
+                confidences.add(conf)
+                charPositions.add(i)
             }
             lastIdx = maxIdx
         }
-        val avg = if (count > 0) totalScore / count else 0f
+
+        val primaryText = sb.toString()
+        val avgConfidence = if (confidences.isNotEmpty()) confidences.average().toFloat() else 0f
+        
+        // --- 候補（Candidates）の生成 ---
+        val candidates = mutableListOf<String>()
+        if (primaryText.isNotEmpty()) {
+            // 第2候補の生成: 信頼度が最も低い文字を、その場所の「第2位の文字」で置き換えてみる
+            // 信頼度の低い上位2箇所のインデックスを取得
+            val sortedIndices = confidences.indices.sortedBy { confidences[it] }
+            
+            // パターン1: 最も自信がない1文字を第2位の文字に置換
+            if (sortedIndices.isNotEmpty()) {
+                val weakIdx = sortedIndices[0]
+                val probPos = charPositions[weakIdx]
+                val probs = probabilities[probPos]
+                
+                // 第2位のインデックスを探す
+                val secondMaxIdx = probs.indices
+                    .filter { it != 0 && it < labelList.size }
+                    .sortedByDescending { probs[it] }
+                    .getOrNull(1) ?: -1
+                
+                if (secondMaxIdx > 0) {
+                    val candidateChars = primaryText.toCharArray()
+                    candidateChars[weakIdx] = labelList[secondMaxIdx][0]
+                    candidates.add(String(candidateChars))
+                }
+            }
+            
+            // パターン2: 2番目に自信がない文字も同様に試す（もしあれば）
+            if (sortedIndices.size >= 2) {
+                val weakIdx2 = sortedIndices[1]
+                val probPos = charPositions[weakIdx2]
+                val probs = probabilities[probPos]
+                val secondMaxIdx = probs.indices
+                    .filter { it != 0 && it < labelList.size }
+                    .sortedByDescending { probs[it] }
+                    .getOrNull(1) ?: -1
+                
+                if (secondMaxIdx > 0) {
+                    val candidateChars = primaryText.toCharArray()
+                    candidateChars[weakIdx2] = labelList[secondMaxIdx][0]
+                    candidates.add(String(candidateChars))
+                }
+            }
+        }
+
         return OcrResult(
-            text          = sb.toString(),
-            confidence    = avg,
-            maxConfidence = if (count > 0) maxConf else 0f,
-            minConfidence = if (count > 0) minConf else 0f
+            text = primaryText,
+            confidence = avgConfidence,
+            maxConfidence = if (confidences.isNotEmpty()) confidences.maxOrNull() ?: 0f else 0f,
+            minConfidence = if (confidences.isNotEmpty()) confidences.minOrNull() ?: 0f else 0f,
+            candidates = candidates.distinct()
         )
     }
 

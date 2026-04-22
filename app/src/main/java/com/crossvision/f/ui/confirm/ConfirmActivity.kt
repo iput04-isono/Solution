@@ -34,17 +34,34 @@ class ConfirmActivity : AppCompatActivity() {
 
         val productCodes = intent.getStringArrayListExtra("PRODUCT_CODES") ?: arrayListOf()
         val rawTexts = intent.getStringArrayListExtra("RAW_TEXTS") ?: arrayListOf()
+        val candidates = intent.getStringArrayListExtra("CANDIDATES") ?: arrayListOf()
+        val imagePath = intent.getStringExtra("IMAGE_PATH")
 
         setupToolbar()
-        setupRecyclerView(productCodes, rawTexts)
+        showCapturedImage(imagePath)
+        setupRecyclerView(productCodes, rawTexts, candidates)
         setupUI()
+    }
+
+    private fun showCapturedImage(path: String?) {
+        if (path.isNullOrEmpty()) return
+        
+        try {
+            val bitmap = android.graphics.BitmapFactory.decodeFile(path)
+            if (bitmap != null) {
+                binding.ivCapturedImage.setImageBitmap(bitmap)
+                binding.cardImagePreview.visibility = View.VISIBLE
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ConfirmActivity", "画像の読み込みに失敗: ${e.message}")
+        }
     }
 
     private fun setupToolbar() {
         binding.toolbar.setNavigationOnClickListener { finish() }
     }
 
-    private fun setupRecyclerView(codes: List<String>, rawTexts: List<String>) {
+    private fun setupRecyclerView(codes: List<String>, rawTexts: List<String>, candidatesList: List<String>) {
         adapter = RecognizedProductAdapter(
             onEditClick = { position -> showEditDialog(position) },
             onDeleteClick = { position -> showDeleteDialog(position) },
@@ -55,9 +72,11 @@ class ConfirmActivity : AppCompatActivity() {
         binding.rvResults.adapter = adapter
 
         val items = codes.mapIndexed { index, code ->
+            val candidates = candidatesList.getOrNull(index)?.split("|")?.filter { it.isNotEmpty() } ?: emptyList()
             RecognizedItem(
                 productCode = code,
-                rawText = rawTexts.getOrElse(index) { code }
+                rawText = rawTexts.getOrElse(index) { code },
+                candidates = candidates
             )
         }
         adapter.setItems(items)
