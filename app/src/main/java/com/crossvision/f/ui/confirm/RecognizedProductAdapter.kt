@@ -103,7 +103,7 @@ class RecognizedProductAdapter(
             binding.cbSelect.isChecked = item.isSelected
 
             binding.cbSelect.setOnCheckedChangeListener { _, isChecked ->
-                val currentPos = bindingAdapterPosition
+                val currentPos = adapterPosition
                 if (currentPos != RecyclerView.NO_POSITION && currentPos in items.indices) {
                     items[currentPos] = items[currentPos].copy(isSelected = isChecked)
                     onSelectionChanged(currentPos, isChecked)
@@ -112,7 +112,7 @@ class RecognizedProductAdapter(
 
             // 製品コードタップで候補を表示
             binding.tvProductCode.setOnClickListener {
-                val currentPos = bindingAdapterPosition
+                val currentPos = adapterPosition
                 if (currentPos != RecyclerView.NO_POSITION && currentPos in items.indices) {
                     val currentItem = items[currentPos]
                     if (currentItem.candidates.isNotEmpty()) {
@@ -124,13 +124,13 @@ class RecognizedProductAdapter(
             }
 
             binding.btnEdit.setOnClickListener {
-                val currentPos = bindingAdapterPosition
+                val currentPos = adapterPosition
                 if (currentPos != RecyclerView.NO_POSITION) {
                     onEditClick(currentPos)
                 }
             }
             binding.btnDelete.setOnClickListener {
-                val currentPos = bindingAdapterPosition
+                val currentPos = adapterPosition
                 if (currentPos != RecyclerView.NO_POSITION) {
                     onDeleteClick(currentPos)
                 }
