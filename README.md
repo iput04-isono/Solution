@@ -1,7 +1,17 @@
-# 鉄骨文字認識アプリ - GroupA
+# CrossVision F — 鉄骨文字認識アプリ
 
-鉄骨工程管理システムの Android アプリケーションです。  
-鉄骨製品に刻印された製品番号をカメラで撮影し、AI（PaddleOCR）で自動認識・工程登録するシステムです。
+> **GroupA 開発** | 鉄骨工程管理システムの Android アプリケーション
+
+鉄骨製品に刻印された製品番号をカメラで撮影し、AI（PaddleOCR）で自動認識・工程登録するシステムです。  
+認識した製品コードはサーバーへリアルタイム送信され、オフライン時も端末に保存してオンライン復帰時に自動同期します。
+
+## リポジトリ
+
+| リポジトリ | ブランチ | 役割 |
+|---|---|---|
+| [iput04-isono/sevenstar](https://github.com/iput04-isono/sevenstar) | `main` | GroupA 開発リポジトリ（主作業場所） |
+| [iput04-isono/Solution](https://github.com/iput04-isono/Solution) | `prototype` | チーム統合ブランチ（リリース相当） |
+| [iput04-isono/Solution](https://github.com/iput04-isono/Solution) | `prototype_Ver2.0` | prototype の Ver2.0 スナップショット |
 
 ---
 
@@ -23,8 +33,13 @@
 ### Step 1. リポジトリを取得
 
 ```bash
+# GroupA 開発リポジトリ（推奨）
 git clone https://github.com/iput04-isono/sevenstar.git
 cd sevenstar
+
+# チーム統合リポジトリから取得する場合
+git clone -b prototype https://github.com/iput04-isono/Solution.git
+cd Solution
 ```
 
 ### Step 2. Android Studio で開く
@@ -111,14 +126,30 @@ cd sevenstar
    ```
 3. サーバー起動:
    ```bash
+   # ポート 5000 で起動（Android アプリのデフォルト接続先）
+   python main.py
+   # または
    uvicorn main:app --host 0.0.0.0 --port 5000 --reload
    ```
 
 ### サーバーの主要機能
-- **自動発見 (mDNS/NSD)**: サーバーを起動すると、ネットワーク内の Android アプリが自動的にサーバーを見つけます（IP アドレスの手動設定不要）。
-- **ダッシュボード**: `http://localhost:5000/` にアクセスすると、登録状況をリアルタイムで確認できます。
-- **API キー認証**: すべての登録リクエストは `X-API-KEY` ヘッダーによる認証が必要です。
-- **CSV エクスポート**: 管理画面から登録データを Excel 等で開ける形式でダウンロード可能です。
+
+| 機能 | 説明 |
+|---|---|
+| **自動発見 (mDNS/Zeroconf)** | 起動と同時に `_crossvision._tcp.local.` でサービスを広告。アプリが IP アドレス不要で自動接続 |
+| **管理ダッシュボード** | `http://localhost:5000/admin` でリアルタイムに登録状況を確認 |
+| **API キー認証** | `X-API-KEY: cvf_7s_9922_zrkp_8x11` ヘッダーによる認証 |
+| **CSV エクスポート** | `GET /api/export/csv` で Excel 対応の CSV をダウンロード |
+
+### サーバー API エンドポイント一覧
+
+| メソッド | パス | 説明 | 認証 |
+|---|---|---|---|
+| `POST` | `/api/registrations` | 登録データ受信・保存 | ✅ 必要 |
+| `GET` | `/api/registrations` | 登録データ一覧取得 | ❌ 不要 |
+| `GET` | `/api/export/csv` | CSV ダウンロード | ❌ 不要 |
+| `GET` | `/health` | サーバー死活確認 | ❌ 不要 |
+| `GET` | `/admin` | 管理ダッシュボード | ❌ 不要 |
 
 ---
 
@@ -158,9 +189,10 @@ cd sevenstar
 
 ### UI の便利な機能
 
-- **再読み込み（同期）**: カテゴリ選択の横にある 🔄 アイコンをタップすると、最新のマスターデータを再読み込みします。
+- **再読み込み（同期）**: カテゴリ選択の横にある 🔄 アイコンをタップすると、最新のマスターデータを手動で再読み込みします。
 - **ログアウト**: 🚪 アイコンからログイン画面に戻れます。
-- **自動同期**: ネットワークが不安定な場所で登録しても、オンライン復帰時にバックグラウンドで自動送信されます。
+- **自動同期**: ネットワークが不安定な場所で登録しても、オンライン復帰時にバックグラウンドで自動送信されます（WorkManager による 15 分間隔の定期同期）。
+- **製品コード自動更新**: サーバーの最新製品コードリストを 24 時間ごとに自動取得し、ローカル DB を更新します。
 
 ---
 
@@ -305,6 +337,28 @@ return if (rotatedDist < normalDist) rotatedResult else normalResult
 
 > **データソース**：製品コードは Room DB（サーバー同期済み）を優先して読み込みます。DB が空の場合は `assets/product_labels.txt`（初期データ 1017 件）にフォールバックします。サーバー同期は WorkManager が 24 時間ごとにバックグラウンドで自動実行します。
 
+#### 製品コードマスター同期フロー
+
+```
+[起動 / WorkManager 定期実行]
+         │
+         ▼
+ ネットワーク確認 ── 未接続 ──→ スキップ（-1 を返す）
+         │ 接続あり
+         ▼
+ 前回同期から 24 時間以内？ ── YES ──→ スキップ（-1 を返す）
+         │ NO
+         ▼
+ GET /api/product-labels でサーバーから取得
+（現在はモック: assets/product_labels.txt を参照）
+         │
+         ▼
+ product_labels テーブルを全削除 → 新リストを一括挿入
+         │
+         ▼
+ LabelMatcher が DB から最新リストを読み込み
+```
+
 #### Levenshtein 距離（編集距離）とは
 
 2 つの文字列の「**似ている度合い**」を数値化する方法です。  
@@ -417,26 +471,44 @@ server/
 ## ブランチ運用ルール
 
 ```
+[Solution リポジトリ]
 prototype          ← 動作確認済みの統合ブランチ（リリース相当）
+prototype_Ver2.0   ← prototype の Ver2.0 時点のスナップショット
 prototype_develop  ← prototype への統合前の開発ブランチ
 feature/*          ← 機能ごとの作業ブランチ
+
+[sevenstar リポジトリ]
+main               ← GroupA 主作業ブランチ（= Solution/prototype と同期）
 ```
 
-### 開発フロー
+### リポジトリ間の同期
+
+```bash
+# sevenstar の main に作業内容をプッシュ
+git push origin main
+
+# Solution/prototype にも同期（チームへの反映）
+git push upstream main:prototype
+
+# upstream（Solution）の最新を取り込む
+git fetch upstream
+git merge upstream/prototype
+```
+
+### 機能開発フロー
 
 ```bash
 # 1. prototype_develop から作業ブランチを切る
-git checkout prototype_develop
-git pull origin prototype_develop
-git checkout -b feature/機能名
+git fetch upstream
+git checkout -b feature/機能名 upstream/prototype_develop
 
 # 2. 作業してコミット
 git add .
 git commit -m "feat: 機能の説明"
 
-# 3. prototype_develop へ Pull Request を出す
+# 3. sevenstar へプッシュ → Solution へ PR
 git push origin feature/機能名
-# → PR: feature/機能名 → prototype_develop
+# → PR: feature/機能名 → prototype_develop（Solution）
 # → 動作確認後、prototype_develop → prototype へ PR
 ```
 
@@ -471,7 +543,18 @@ git push origin feature/機能名
 
 ---
 
+## 更新履歴
+
+| バージョン | 日付 | 内容 |
+|---|---|---|
+| Ver 2.0 | 2026-04-24 | 製品コードマスターの Room DB 管理化・サーバー自動同期機能を統合（GroupA × チームメンバー機能マージ） |
+| Ver 1.x | 〜2026-04-23 | OCR 認識・登録・履歴・オフライン同期の基本機能実装 |
+
+---
+
 ## 関連リソース
 
 - [画像処理デモ（スタンドアロン）](./image-preprocessing/) - OCR 単体の動作確認用
+- [sevenstar リポジトリ](https://github.com/iput04-isono/sevenstar) - GroupA 開発リポジトリ
+- [Solution/prototype](https://github.com/iput04-isono/Solution/tree/prototype) - チーム統合ブランチ
 - 正解ラベルデータ・テスト画像 → チーム共有の Google Drive を参照
