@@ -7,20 +7,23 @@ import com.google.gson.annotations.SerializedName
  * Flask サーバーが受け取る JSON 形式に合わせる
  */
 data class RegistrationRequest(
-    @SerializedName("product_code")
-    val productCode: String,
+    @SerializedName("process_id")
+    val processId: Int,
 
-    @SerializedName("construction_name")
-    val constructionName: String,
+    @SerializedName("division")
+    val division: String,
 
-    @SerializedName("process_name")
-    val processName: String,
+    @SerializedName("worker_id")
+    val workerId: Int,
 
-    @SerializedName("user_id")
-    val userId: String,
+    @SerializedName("device_id")
+    val deviceId: String,
 
     @SerializedName("registered_at")
-    val registeredAt: Long
+    val registeredAt: String,
+
+    @SerializedName("product_numbers")
+    val productNumbers: List<String>
 )
 
 /**

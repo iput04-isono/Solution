@@ -41,12 +41,12 @@ class SyncManager(private val context: Context) {
 
                 // サーバーへ送信
                 val request = com.crossvision.f.data.model.RegistrationRequest(
-                    process_id = 1, // TODO: IDの動的取得
+                    processId = 1, // TODO: IDの動的取得
                     division = if (item.processName.contains("入")) "start" else "end",
-                    worker_id = 1,
-                    device_id = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID),
-                    registered_at = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).format(java.util.Date(item.registeredAt)),
-                    product_numbers = listOf(item.productCode)
+                    workerId = 1,
+                    deviceId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID),
+                    registeredAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).format(java.util.Date(item.registeredAt)),
+                    productNumbers = listOf(item.productCode)
                 )
 
                 val response = com.crossvision.f.data.api.RetrofitClient.apiService.postRegistration(request)
