@@ -88,11 +88,6 @@ graph TB
 ### Step 1. リポジトリを取得
 
 ```bash
-# GroupA 開発リポジトリ（推奨）
-git clone https://github.com/iput04-isono/sevenstar.git
-cd sevenstar
-
-# チーム統合リポジトリから取得する場合
 git clone -b prototype https://github.com/iput04-isono/Solution.git
 cd Solution
 ```
