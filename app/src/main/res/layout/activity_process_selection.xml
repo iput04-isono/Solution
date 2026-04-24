@@ -55,13 +55,6 @@
                     android:layout_weight="1"
                     android:text="@string/category_part" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnCategoryWarehouse"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/category_warehouse" />
 
             </com.google.android.material.button.MaterialButtonToggleGroup>
 
@@ -172,22 +165,39 @@
         android:elevation="8dp">
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnReload"
+            style="@style/SecondaryButton"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/button_height"
+            android:layout_weight="0.8"
+            android:text="再読込"
+            android:layout_marginEnd="@dimen/spacing_xs" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnHistory"
             style="@style/SecondaryButton"
             android:layout_width="0dp"
             android:layout_height="@dimen/button_height"
             android:layout_weight="1"
-            android:text="登録履歴"
-            android:layout_marginEnd="@dimen/spacing_sm" />
+            android:text="履歴"
+            android:layout_marginEnd="@dimen/spacing_xs" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnNext"
             style="@style/PrimaryButton"
             android:layout_width="0dp"
             android:layout_height="@dimen/button_height"
-            android:layout_weight="1"
+            android:layout_weight="1.2"
             android:text="@string/btn_next"
-            android:enabled="false" />
+            android:enabled="false"
+            android:layout_marginEnd="@dimen/spacing_xs" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnLogout"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/button_height"
+            android:text="終了" />
 
     </LinearLayout>
 

@@ -24,6 +24,7 @@ class LibraryActivity : AppCompatActivity() {
     private lateinit var repository: AppRepository
     private lateinit var syncManager: SyncManager
     private lateinit var adapter: RegistrationHistoryAdapter
+    private var networkCallback: android.net.ConnectivityManager.NetworkCallback? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,10 +39,46 @@ class LibraryActivity : AppCompatActivity() {
         setupSearch()
         setupSync()
         observeData()
+        setupNetworkObserver()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // ネットワーク監視の開始
+        val connectivityManager = getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        networkCallback?.let {
+            connectivityManager.registerDefaultNetworkCallback(it)
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // ネットワーク監視の解除
+        val connectivityManager = getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        networkCallback?.let {
+            connectivityManager.unregisterNetworkCallback(it)
+        }
     }
 
     private fun setupToolbar() {
         binding.toolbar.setNavigationOnClickListener { finish() }
+    }
+
+    private fun setupNetworkObserver() {
+        networkCallback = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                super.onAvailable(network)
+                // 接続が回復したら自動同期を試行（未送信データがある場合のみ）
+                lifecycleScope.launch {
+                    val count = repository.getUnsyncedRegistrations().size
+                    if (count > 0) {
+                        runOnUiThread {
+                            performSync()
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun setupRecyclerView() {
@@ -102,29 +139,28 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun performSync() {
         if (!syncManager.isNetworkAvailable()) {
-            Snackbar.make(binding.root, "ネットワークに接続されていません", Snackbar.LENGTH_SHORT).show()
-            return
+            return // 自動検知時は通知を出さずに静かに終わる
         }
 
         binding.btnSync.isEnabled = false
-        binding.tvSyncStatus.text = "同期中..."
+        binding.tvSyncStatus.text = "サーバー探索・同期中..."
 
         lifecycleScope.launch {
             try {
                 val count = syncManager.syncPendingRegistrations()
-                Snackbar.make(
-                    binding.root,
-                    "同期が完了しました（${count}件）",
-                    Snackbar.LENGTH_SHORT
-                ).show()
+                if (count > 0) {
+                    Snackbar.make(
+                        binding.root,
+                        "同期が完了しました（${count}件）",
+                        Snackbar.LENGTH_SHORT
+                    ).show()
+                }
             } catch (e: Exception) {
-                Snackbar.make(
-                    binding.root,
-                    "同期に失敗しました: ${e.message}",
-                    Snackbar.LENGTH_LONG
-                ).show()
+                // 自動実行時はトースト表示にとどめる
+                android.widget.Toast.makeText(this@LibraryActivity, "自動同期に失敗しました", android.widget.Toast.LENGTH_SHORT).show()
             } finally {
                 binding.btnSync.isEnabled = true
+                observeAllData() // 表示を更新
             }
         }
     }

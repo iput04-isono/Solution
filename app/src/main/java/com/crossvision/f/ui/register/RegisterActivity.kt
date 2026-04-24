@@ -76,9 +76,6 @@ class RegisterActivity : AppCompatActivity() {
     }
 
     private fun performRegistration() {
-        val warehouseNo = binding.etWarehouseNo.text?.toString()?.trim() ?: ""
-        val columnNo = binding.etColumnNo.text?.toString()?.trim() ?: ""
-        val tierNo = binding.etTierNo.text?.toString()?.trim() ?: ""
 
         binding.btnRegister.isEnabled = false
         binding.progressRegister.visibility = android.view.View.VISIBLE
@@ -94,9 +91,9 @@ class RegisterActivity : AppCompatActivity() {
                         productCode = code,
                         constructionName = constructionName,
                         processName = processName,
-                        warehouseNo = warehouseNo,
-                        columnNo = columnNo,
-                        tierNo = tierNo,
+                        warehouseNo = "",
+                        columnNo = "",
+                        tierNo = "",
                         syncStatus = initialStatus,
                         userId = userId
                     )
@@ -107,9 +104,9 @@ class RegisterActivity : AppCompatActivity() {
                 // オンラインなら即座に同期を試行
                 if (isOnline) {
                     SyncWorker.executeImmediateSync(applicationContext)
-                    showSuccessMessage("登録が完了しました（${productCodes.size}件）")
+                    showSuccessMessage("登録が完了しました（${productCodes.size}件）\nサーバーへ送信されました")
                 } else {
-                    showSuccessMessage("オフラインで保存しました（${productCodes.size}件）\nオンライン復帰時に自動送信されます")
+                    showSuccessMessage("オフラインで保存しました（${productCodes.size}件）\nネットワーク復帰時に自動で送信されます")
                 }
 
             } catch (e: Exception) {
@@ -124,7 +121,12 @@ class RegisterActivity : AppCompatActivity() {
 
     private fun showSuccessMessage(message: String) {
         Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG)
-            .setAction("OK") { finish() }
+            .setAction("OK") {
+                val intent = android.content.Intent(this, com.crossvision.f.ui.process.ProcessSelectionActivity::class.java)
+                intent.flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+                startActivity(intent)
+                finish()
+            }
             .show()
     }
 }
