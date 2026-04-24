@@ -19,6 +19,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // デバッグビルドは ID にサフィックスを付けて既存アプリと共存できるようにする
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            resValue("string", "app_name_suffix", "鉄骨認識(dev)")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -66,17 +72,23 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
-    // PaddleOCR（ONNX Runtime）- OCRエンジン用
+    // WorkManager
+    implementation(libs.androidx.work.runtime)
+
+    // Coroutines
+    implementation(libs.kotlinx.coroutines.android)
+
+    // Retrofit + OkHttp
+    implementation(libs.retrofit.core)
+    implementation(libs.retrofit.gson)
+    implementation(libs.okhttp.core)
+    implementation(libs.okhttp.logging)
+
+    // PaddleOCR（ONNX Runtime）
     implementation(libs.onnxruntime.android)
 
     // WorkManager (オフライン同期)
     implementation(libs.androidx.work.runtime)
-
-    // Retrofit + OkHttp (サーバー同期)
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.gson)
-    implementation(libs.okhttp.logging)
-    implementation(libs.gson)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)

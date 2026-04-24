@@ -1,8 +1,11 @@
 package com.crossvision.f.ui.confirm
 
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.view.View
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.EditText
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -10,6 +13,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.crossvision.f.databinding.ActivityConfirmBinding
 import com.crossvision.f.ocr.ProductCodeValidator
 import com.crossvision.f.ui.register.RegisterActivity
+import java.io.File
 
 /**
  * 認識結果確認画面
@@ -32,37 +36,63 @@ class ConfirmActivity : AppCompatActivity() {
         constructionName = intent.getStringExtra("CONSTRUCTION_NAME") ?: ""
         processName = intent.getStringExtra("PROCESS_NAME") ?: ""
 
-        val productCodes = intent.getStringArrayListExtra("PRODUCT_CODES") ?: arrayListOf()
-        val rawTexts = intent.getStringArrayListExtra("RAW_TEXTS") ?: arrayListOf()
-        val confidences = intent.getStringArrayListExtra("CONFIDENCES") ?: arrayListOf()
-        val candidates = intent.getStringArrayListExtra("CANDIDATES") ?: arrayListOf()
-        val imagePath = intent.getStringExtra("IMAGE_PATH")
+        val productCodes    = intent.getStringArrayListExtra("PRODUCT_CODES") ?: arrayListOf()
+        val rawTexts        = intent.getStringArrayListExtra("RAW_TEXTS") ?: arrayListOf()
+        val debugInfo       = intent.getStringArrayListExtra("DEBUG_INFO") ?: arrayListOf()
+        val unmatchedTexts  = intent.getStringArrayListExtra("UNMATCHED_TEXTS") ?: arrayListOf()
+        val overlayPath     = intent.getStringExtra("OVERLAY_IMAGE_PATH")
 
         setupToolbar()
-        showCapturedImage(imagePath)
-        setupRecyclerView(productCodes, rawTexts, confidences, candidates)
+        setupOverlayImage(overlayPath)
+        setupRecyclerView(productCodes, rawTexts, debugInfo)
+        setupUnmatchedSection(unmatchedTexts)
         setupUI()
-    }
-
-    private fun showCapturedImage(path: String?) {
-        if (path.isNullOrEmpty()) return
-        
-        try {
-            val bitmap = android.graphics.BitmapFactory.decodeFile(path)
-            if (bitmap != null) {
-                binding.ivCapturedImage.setImageBitmap(bitmap)
-                binding.cardImagePreview.visibility = View.VISIBLE
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("ConfirmActivity", "画像の読み込みに失敗: ${e.message}")
-        }
     }
 
     private fun setupToolbar() {
         binding.toolbar.setNavigationOnClickListener { finish() }
     }
 
-    private fun setupRecyclerView(codes: List<String>, rawTexts: List<String>, confs: List<String>, candidatesList: List<String>) {
+    private fun setupOverlayImage(path: String?) {
+        if (path == null) return
+        val file = File(path)
+        if (!file.exists()) return
+        val bitmap = BitmapFactory.decodeFile(path) ?: return
+        binding.ivOverlay.setImageBitmap(bitmap)
+        binding.ivOverlay.visibility = View.VISIBLE
+    }
+
+    private fun setupUnmatchedSection(unmatchedTexts: List<String>) {
+        if (unmatchedTexts.isEmpty()) return
+        binding.unmatchedSection.visibility = View.VISIBLE
+        val container = binding.unmatchedList
+        container.removeAllViews()
+        val dp8 = (8 * resources.displayMetrics.density).toInt()
+        val dp4 = (4 * resources.displayMetrics.density).toInt()
+        unmatchedTexts.forEach { text ->
+            val tv = TextView(this).apply {
+                this.text = "・$text"
+                textSize = 13f
+                setTextColor(0xFF495057.toInt())
+                setPadding(0, dp4, 0, dp4)
+                val bgDrawable = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(0xFFFFFFFF.toInt())
+                    cornerRadius = dp4.toFloat()
+                    setStroke(1, 0xFFCED4DA.toInt())
+                }
+                background = bgDrawable
+                val lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, dp4, 0, 0) }
+                layoutParams = lp
+                setPadding(dp8, dp8, dp8, dp8)
+            }
+            container.addView(tv)
+        }
+    }
+
+    private fun setupRecyclerView(codes: List<String>, rawTexts: List<String>, debugInfo: List<String> = emptyList()) {
         adapter = RecognizedProductAdapter(
             onEditClick = { position -> showEditDialog(position) },
             onDeleteClick = { position -> showDeleteDialog(position) },
@@ -73,13 +103,13 @@ class ConfirmActivity : AppCompatActivity() {
         binding.rvResults.adapter = adapter
 
         val items = codes.mapIndexed { index, code ->
-            val candidates = candidatesList.getOrNull(index)?.split("|")?.filter { it.isNotEmpty() } ?: emptyList()
-            val conf = confs.getOrNull(index)?.toFloatOrNull() ?: 1.0f
+            val raw = rawTexts.getOrElse(index) { code }
+            val debug = debugInfo.getOrElse(index) { "" }
+            // デバッグ時：rawTextにデバッグ情報を付加して表示
+            val displayRaw = if (debug.isNotEmpty()) "$raw\n[$debug]" else raw
             RecognizedItem(
                 productCode = code,
-                rawText = rawTexts.getOrElse(index) { code },
-                confidence = conf,
-                candidates = candidates
+                rawText = displayRaw
             )
         }
         adapter.setItems(items)
@@ -109,10 +139,7 @@ class ConfirmActivity : AppCompatActivity() {
     }
 
     private fun showEditDialog(position: Int) {
-        val items = adapter.getItems()
-        if (position !in items.indices) return
-        
-        val currentItem = items[position]
+        val currentItem = adapter.getItems()[position]
         val editText = EditText(this).apply {
             setText(currentItem.productCode)
             setPadding(48, 32, 48, 32)
@@ -139,15 +166,13 @@ class ConfirmActivity : AppCompatActivity() {
     }
 
     private fun showDeleteDialog(position: Int) {
-        val items = adapter.getItems()
-        if (position !in items.indices) return
-        
         AlertDialog.Builder(this)
-            .setTitle("項目を削除")
-            .setMessage("この項目をリストから削除しますか？")
+            .setTitle("削除確認")
+            .setMessage("この製品コードを削除しますか？")
             .setPositiveButton("削除") { _, _ ->
                 adapter.removeItem(position)
-                updateRegisterButton()
+                updateResultCount()
+                updateEmptyState()
             }
             .setNegativeButton("キャンセル", null)
             .show()
@@ -196,7 +221,7 @@ class ConfirmActivity : AppCompatActivity() {
 
     private fun updateEmptyState() {
         val isEmpty = adapter.itemCount == 0
-        binding.rvResults.visibility = if (isEmpty) View.GONE else View.VISIBLE
+        binding.rvResults.visibility  = if (isEmpty) View.GONE else View.VISIBLE
         binding.emptyLayout.visibility = if (isEmpty) View.VISIBLE else View.GONE
     }
 

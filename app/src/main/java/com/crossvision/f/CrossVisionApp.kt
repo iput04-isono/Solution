@@ -3,7 +3,6 @@ package com.crossvision.f
 import android.app.Application
 import androidx.work.Configuration
 import androidx.work.WorkManager
-import com.crossvision.f.sync.SyncWorker
 
 /**
  * アプリケーションクラス
@@ -13,7 +12,6 @@ class CrossVisionApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // 定期同期ジョブのスケジュール開始
-        SyncWorker.schedulePeriodicSync(this)
+        // WorkManagerはデフォルトの自動初期化を使用
     }
 }

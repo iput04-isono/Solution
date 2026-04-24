@@ -69,9 +69,10 @@ class CameraActivity : AppCompatActivity() {
                     it.setSurfaceProvider(binding.previewView.surfaceProvider)
                 }
 
-            // 画像キャプチャ
+            // 画像キャプチャ（端末の向きに合わせた回転情報をEXIFに付与）
             imageCapture = ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+                .setTargetRotation(binding.previewView.display.rotation)
                 .build()
 
             // 背面カメラを使用

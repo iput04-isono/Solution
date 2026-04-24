@@ -13,21 +13,27 @@ class OcrProcessor(private val context: Context) {
 
     private var engine: OcrEngine? = null
     private val preprocessor = ImagePreprocessor()
+    private val labelMatcher: LabelMatcher by lazy { LabelMatcher(context) }
 
     /**
-     * 画像からテキストを認識し、あわせて認識箇所に枠を描画した画像を生成する。
+     * 画像からテキストを認識する
      * @param bitmap 撮影画像
-     * @return 加工済みBitmapと認識結果リストのペア
+     * @return 認識結果のリスト（製品コード候補情報）
      */
-    suspend fun recognizeTextWithOverlay(bitmap: Bitmap): Pair<Bitmap, List<DomainOcrResult>> = withContext(Dispatchers.Default) {
+    suspend fun recognizeText(bitmap: Bitmap): List<DomainOcrResult> = withContext(Dispatchers.Default) {
+        // バックグラウンドスレッドで重いモデルを初期化する
+        // LabelMatcherを渡すことで向き選択をラベル距離優先にする
         if (engine == null) {
-            engine = OcrEngine(context)
+            engine = OcrEngine(context, labelMatcher)
         }
 
         val processedImage = preprocessor.preprocess(bitmap)
-        val (overlayBitmap, rawResults) = engine!!.runOcrPolygonWithOverlay(processedImage)
+        // 多角形検出(runOcrPolygon)または標準矩形検出(runOcr)を選択。
+        // パイプや鉄骨など斜めの文字に強い多角形検出をデフォルト使用。
+        val rawResults = engine!!.runOcrPolygon(processedImage)
         
         val ocrResults = mutableListOf<DomainOcrResult>()
+
         for (res in rawResults) {
             val text = res.text.trim()
             if (text.isEmpty()) continue
@@ -35,24 +41,26 @@ class OcrProcessor(private val context: Context) {
             val cleanedCode = ProductCodeValidator.cleanProductCode(text)
             val validation = ProductCodeValidator.validate(cleanedCode)
 
-            if (validation.isValid) {
-                val cleanedCandidates = res.candidates.map { 
-                    ProductCodeValidator.cleanProductCode(it)
-                }.filter { it.isNotEmpty() && it != cleanedCode }.distinct()
+            val match = labelMatcher.findBest(cleanedCode)
+            val topCandidates = labelMatcher.findTopCandidates(cleanedCode, maxResults = 3)
 
-                ocrResults.add(
-                    DomainOcrResult(
-                        rawText = text,
-                        cleanedCode = cleanedCode,
-                        confidence = res.confidence,
-                        isValid = true,
-                        candidates = cleanedCandidates,
-                        polygon = res.polygon
-                    )
+            // ラベル距離 > 3（正解ラベルに近い候補なし）は除外
+            if (match == null) continue
+
+            ocrResults.add(
+                DomainOcrResult(
+                    rawText = text,
+                    cleanedCode = cleanedCode,
+                    confidence = res.confidence,
+                    isValid = validation.isValid,
+                    matchedLabel = match.label,
+                    matchDistance = match.distance,
+                    isExactMatch = match.isExactMatch,
+                    labelCandidates = topCandidates.map { it.label }
                 )
-            }
+            )
         }
-        Pair(overlayBitmap, ocrResults)
+        ocrResults
     }
 
     /**
@@ -64,11 +72,44 @@ class OcrProcessor(private val context: Context) {
      */
     suspend fun recognizeMultipleProducts(
         bitmap: Bitmap,
-        maxResults: Int = 5
+        maxResults: Int = Int.MAX_VALUE
     ): List<DomainOcrResult> {
-        val results = recognizeTextWithOverlay(bitmap).second
-        return results.take(maxResults)
+        val results = recognizeText(bitmap)
+        return if (maxResults == Int.MAX_VALUE) results else results.take(maxResults)
     }
+
+    /**
+     * OCR実行 + 検出領域オーバーレイ画像を同時に返す。
+     * matchedLabel != null → ラベル距離 ≤ 3（登録候補）
+     * matchedLabel == null → ラベル距離 > 3（参考表示用）
+     */
+    suspend fun recognizeWithOverlay(bitmap: Bitmap): Pair<Bitmap, List<DomainOcrResult>> =
+        withContext(Dispatchers.Default) {
+            if (engine == null) engine = OcrEngine(context, labelMatcher)
+
+            val processedImage = preprocessor.preprocess(bitmap)
+            val (overlayBitmap, rawResults) = engine!!.runOcrPolygonWithOverlay(processedImage)
+
+            val domainResults = rawResults.mapNotNull { res ->
+                val text = res.text.trim()
+                if (text.isEmpty()) return@mapNotNull null
+                val cleanedCode   = ProductCodeValidator.cleanProductCode(text)
+                val validation    = ProductCodeValidator.validate(cleanedCode)
+                val match         = labelMatcher.findBest(cleanedCode)
+                val topCandidates = labelMatcher.findTopCandidates(cleanedCode, maxResults = 3)
+                DomainOcrResult(
+                    rawText         = text,
+                    cleanedCode     = cleanedCode,
+                    confidence      = res.confidence,
+                    isValid         = validation.isValid,
+                    matchedLabel    = match?.label,          // null = 距離 > 3
+                    matchDistance   = match?.distance ?: Int.MAX_VALUE,
+                    isExactMatch    = match?.isExactMatch ?: false,
+                    labelCandidates = topCandidates.map { it.label }
+                )
+            }
+            Pair(overlayBitmap, domainResults)
+        }
 
     /**
      * リソースの解放
@@ -83,10 +124,16 @@ class OcrProcessor(private val context: Context) {
  * 画面へ引き渡す用のOCR認識結果
  */
 data class DomainOcrResult(
-    val rawText: String,          // OCR生テキスト
-    val cleanedCode: String,      // クリーニング済み製品コード
-    val confidence: Float,        // 認識信頼度
-    val isValid: Boolean,         // バリデーション結果
-    val candidates: List<String> = emptyList(), // 候補リスト
-    val polygon: FloatArray? = null // 多角形座標
-)
+    val rawText: String,                      // OCR生テキスト
+    val cleanedCode: String,                  // クリーニング済み製品コード
+    val confidence: Float,                    // 認識信頼度
+    val isValid: Boolean,                     // フォーマットバリデーション結果
+    val matchedLabel: String? = null,         // 正解ラベルとの照合結果（null=未マッチ）
+    val matchDistance: Int = Int.MAX_VALUE,   // 編集距離（0=完全一致）
+    val isExactMatch: Boolean = false,        // 完全一致フラグ
+    val labelCandidates: List<String> = emptyList() // 候補ラベル上位3件
+) {
+    /** 確定表示用コード：ラベルマッチがあれば正解ラベルを、未マッチならOCR結果を使用 */
+    val displayCode: String
+        get() = matchedLabel ?: cleanedCode
+}

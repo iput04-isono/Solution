@@ -1,6 +1,5 @@
 package com.crossvision.f.ui.register
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.LinearLayout
@@ -77,13 +76,17 @@ class RegisterActivity : AppCompatActivity() {
     }
 
     private fun performRegistration() {
+        val warehouseNo = binding.etWarehouseNo.text?.toString()?.trim() ?: ""
+        val columnNo = binding.etColumnNo.text?.toString()?.trim() ?: ""
+        val tierNo = binding.etTierNo.text?.toString()?.trim() ?: ""
+
         binding.btnRegister.isEnabled = false
         binding.progressRegister.visibility = android.view.View.VISIBLE
 
         lifecycleScope.launch {
             try {
                 val isOnline = syncManager.isNetworkAvailable()
-                val initialStatus = SyncStatus.PENDING
+                val initialStatus = if (isOnline) SyncStatus.PENDING else SyncStatus.PENDING
 
                 // 各製品コードを登録
                 val registrations = productCodes.map { code ->
@@ -91,9 +94,9 @@ class RegisterActivity : AppCompatActivity() {
                         productCode = code,
                         constructionName = constructionName,
                         processName = processName,
-                        warehouseNo = "",
-                        columnNo = "",
-                        tierNo = "",
+                        warehouseNo = warehouseNo,
+                        columnNo = columnNo,
+                        tierNo = tierNo,
                         syncStatus = initialStatus,
                         userId = userId
                     )
@@ -101,19 +104,12 @@ class RegisterActivity : AppCompatActivity() {
 
                 repository.insertRegistrations(registrations)
 
-                // 通信状態およびサーバーの存在に応じたメッセージの出し分け
+                // オンラインなら即座に同期を試行
                 if (isOnline) {
-                    // 実際にサーバーが見つかるか試行
-                    val isServerFound = syncManager.discoverServer()
-                    
-                    if (isServerFound) {
-                        SyncWorker.executeImmediateSync(applicationContext)
-                        showSuccessMessage("サーバーに接続しました。送信を開始します（${productCodes.size}件）\n完了状況は履歴から確認できます")
-                    } else {
-                        showSuccessMessage("Wi-Fi接続中ですがサーバーが見つかりません。自動同期ジョブに登録しました（${productCodes.size}件）")
-                    }
+                    SyncWorker.executeImmediateSync(applicationContext)
+                    showSuccessMessage("登録が完了しました（${productCodes.size}件）")
                 } else {
-                    showSuccessMessage("オフラインで保存しました（${productCodes.size}件）\nネットワーク復帰時に自動で送信されます")
+                    showSuccessMessage("オフラインで保存しました（${productCodes.size}件）\nオンライン復帰時に自動送信されます")
                 }
 
             } catch (e: Exception) {
@@ -128,12 +124,7 @@ class RegisterActivity : AppCompatActivity() {
 
     private fun showSuccessMessage(message: String) {
         Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG)
-            .setAction("OK") {
-                val intent = Intent(this, com.crossvision.f.ui.process.ProcessSelectionActivity::class.java)
-                intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                startActivity(intent)
-                finish()
-            }
+            .setAction("OK") { finish() }
             .show()
     }
 }

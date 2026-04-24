@@ -34,8 +34,7 @@
     <string name="select_construction_first">先に工事を選択してください</string>
     <string name="category_product">製品</string>
     <string name="category_part">部品</string>
-    <string name="btn_reload">再読み込み</string>
-    <string name="btn_logout">ログアウト</string>
+    <string name="category_warehouse">置き場</string>
 
     <!-- 画像認識画面 -->
     <string name="recognize_title">画像認識</string>

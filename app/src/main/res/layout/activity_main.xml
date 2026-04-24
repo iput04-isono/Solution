@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".MainActivity">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="鉄骨文字認識"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 区分選択 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="区分"
+            android:textSize="14sp" />
+
+        <RadioGroup
+            android:id="@+id/divisionGroup"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <RadioButton
+                android:id="@+id/radioStart"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="入庫"
+                android:checked="true" />
+
+            <RadioButton
+                android:id="@+id/radioEnd"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="出庫"
+                android:layout_marginStart="16dp" />
+
+        </RadioGroup>
+
+        <!-- ボタン行 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <Button
+                android:id="@+id/cameraButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="カメラ"
+                android:layout_marginEnd="8dp" />
+
+            <Button
+                android:id="@+id/galleryButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="ギャラリー" />
+
+        </LinearLayout>
+
+        <!-- 画像プレビュー -->
+        <ImageView
+            android:id="@+id/imagePreview"
+            android:layout_width="match_parent"
+            android:layout_height="200dp"
+            android:scaleType="centerInside"
+            android:background="#EEEEEE"
+            android:layout_marginBottom="12dp"
+            android:contentDescription="画像プレビュー" />
+
+        <!-- プログレスバー -->
+        <ProgressBar
+            android:id="@+id/progressBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone"
+            android:layout_marginBottom="8dp" />
+
+        <!-- OCR結果 -->
+        <TextView
+            android:id="@+id/ocrResultText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="カメラまたはギャラリーから画像を選択してください"
+            android:textSize="14sp"
+            android:layout_marginBottom="12dp"
+            android:padding="8dp"
+            android:background="#F5F5F5" />
+
+        <!-- 保存ボタン -->
+        <Button
+            android:id="@+id/saveButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="DBに保存"
+            android:visibility="gone" />
+
+        <!-- 同期ボタン -->
+        <Button
+            android:id="@+id/syncButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="サーバーと同期"
+            android:layout_marginTop="8dp" />
+
+    </LinearLayout>
+
+</ScrollView>

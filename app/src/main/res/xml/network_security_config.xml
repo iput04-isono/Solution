@@ -1,12 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- 
-        開発・テスト環境用：Flaskサーバー等のローカルIPへのHTTP通信を許可。
-        本番環境ではドメインを指定して制限するか、HTTPS化を推奨。
-    -->
-    <base-config cleartextTrafficPermitted="true">
-        <trust-anchors>
-            <certificates src="system" />
-        </trust-anchors>
-    </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
 </network-security-config>

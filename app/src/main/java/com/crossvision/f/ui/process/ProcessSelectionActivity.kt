@@ -39,9 +39,6 @@ class ProcessSelectionActivity : AppCompatActivity() {
         setupToolbar()
         setupUI()
         observeViewModel()
-
-        // 自動同期タスクのスケジュール開始
-        com.crossvision.f.sync.SyncWorker.schedulePeriodicSync(applicationContext)
     }
 
     private fun setupToolbar() {
@@ -57,6 +54,7 @@ class ProcessSelectionActivity : AppCompatActivity() {
                 val category = when (checkedId) {
                     R.id.btnCategoryProduct -> "product"
                     R.id.btnCategoryPart -> "part"
+                    R.id.btnCategoryWarehouse -> "warehouse"
                     else -> "product"
                 }
                 viewModel.selectCategory(category)
@@ -99,24 +97,6 @@ class ProcessSelectionActivity : AppCompatActivity() {
         // 登録履歴ボタン
         binding.btnHistory.setOnClickListener {
             startActivity(Intent(this, LibraryActivity::class.java))
-        }
-
-        // 再読み込みボタン
-        binding.btnReload.setOnClickListener {
-            android.widget.Toast.makeText(this, "マスターデータを再読み込みしています...", android.widget.Toast.LENGTH_SHORT).show()
-            // UI状態のリセット
-            binding.actvConstruction.setText("", false)
-            binding.actvProcess.setText("", false)
-            binding.tilProcess.isEnabled = false
-        }
-
-        // ログアウトボタン
-        binding.btnLogout.setOnClickListener {
-            // ログイン画面へ戻る
-            val intent = Intent(this, com.crossvision.f.ui.login.LoginActivity::class.java)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            startActivity(intent)
-            finish()
         }
     }
 
