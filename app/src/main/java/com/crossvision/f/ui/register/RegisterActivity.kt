@@ -126,8 +126,11 @@ class RegisterActivity : AppCompatActivity() {
     }
 
     private fun showSuccessMessage(message: String) {
-        Snackbar.make(binding.root, message, Snackbar.LENGTH_LONG)
-            .setAction("OK") {
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("登録状況")
+            .setMessage(message)
+            .setCancelable(false)
+            .setPositiveButton("OK") { _, _ ->
                 val intent = android.content.Intent(this, com.crossvision.f.ui.process.ProcessSelectionActivity::class.java)
                 intent.flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
                 startActivity(intent)
