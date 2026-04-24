@@ -15,7 +15,62 @@
 
 ---
 
+## システム構成
+
+```mermaid
+graph TB
+    subgraph Android["📱 Android 端末（CrossVision F）"]
+        direction TB
+        UI["UI レイヤー\nログイン / 工程選択 / カメラ撮影\n認識確認 / 登録履歴"]
+        OCR["OCR エンジン\nDBNet（領域検出）+ SVTR（文字認識）\n推論: ONNX Runtime"]
+        LM["LabelMatcher\nLevenshtein 距離照合\n編集距離 ≤ 3 → 登録候補"]
+        DB[("Room DB\n登録データ\n製品コードマスター\n工事 / 工程 / ユーザー")]
+        SW["SyncWorker\nWorkManager\n15 分間隔 / 定期実行"]
+        SM["SyncManager\n①登録データ → サーバー送信\n②製品マスター → DB 更新\n（24 時間キャッシュ）"]
+        RC["Retrofit HTTP クライアント\nX-API-KEY ヘッダー付き"]
+    end
+
+    subgraph LAN["🌐 LAN（同一ネットワーク）"]
+        MDNS["mDNS 自動発見\n_crossvision._tcp.local.\nZeroconf サービス広告"]
+    end
+
+    subgraph SRV["🖥️ FastAPI サーバー（PC / Windows）"]
+        direction TB
+        API["REST API\nPOST /api/registrations\nGET  /api/registrations\nGET  /api/export/csv\nGET  /health"]
+        DASH["管理ダッシュボード\ndashboard.html\nhttp://localhost:5000/admin"]
+        JSON[("registrations.json\n登録データ永続化")]
+    end
+
+    UI -->|撮影画像| OCR
+    OCR -->|テキスト候補| LM
+    LM -->|照合済み製品コード| UI
+    UI -->|登録確定| DB
+    DB -->|未同期データ| SW
+    SW --> SM
+    SM --> RC
+    MDNS -->|サーバー IP:Port を通知| RC
+    RC -->|HTTP POST 登録送信| API
+    RC -.->|HTTP GET マスター取得 TODO| API
+    API --> JSON
+    DASH -->|データ参照| JSON
+```
+
+### 構成の補足
+
+| コンポーネント | 技術 | 説明 |
+|---|---|---|
+| OCR 領域検出 | DBNet / `det.onnx` | 刻印文字の領域を多角形で検出（PP-OCRv4） |
+| OCR 文字認識 | SVTR / `ppocr_rec.onnx` | 検出領域から文字列を読み取り（PP-OCRv4） |
+| 照合エンジン | Levenshtein 距離 | OCR 誤認識を許容しながら製品コードを照合 |
+| ローカル DB | Room（SQLite） | 登録データ＋製品コードマスター（v2 で `product_labels` テーブル追加） |
+| バックグラウンド同期 | WorkManager | オンライン時に 15 分間隔で自動実行 |
+| サーバー自動発見 | Zeroconf / mDNS | IP 手入力なしでアプリがサーバーを自動検出 |
+| バックエンドサーバー | FastAPI（Python） | 登録受信・CSV 出力・管理ダッシュボードを提供 |
+
+---
+
 ## 動作確認済み環境
+
 
 | 項目 | バージョン / 内容 |
 |---|---|
