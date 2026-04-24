@@ -23,6 +23,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.CrossVisionF"
+        android:usesCleartextTraffic="true"
         tools:targetApi="34">
 
         <!-- ログイン画面（起動画面） -->
