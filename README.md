@@ -21,51 +21,87 @@
 graph TB
     subgraph Android["📱 Android 端末（CrossVision F）"]
         direction TB
-        UI["UI レイヤー\nログイン / 工程選択 / カメラ撮影\n認識確認 / 登録履歴"]
-        OCR["OCR エンジン\nDBNet（領域検出）+ SVTR（文字認識）\n推論: ONNX Runtime"]
-        LM["LabelMatcher\nLevenshtein 距離照合\n編集距離 ≤ 3 → 登録候補"]
-        DB[("Room DB\n登録データ\n製品コードマスター\n工事 / 工程 / ユーザー")]
-        SW["SyncWorker\nWorkManager\n15 分間隔 / 定期実行"]
-        SM["SyncManager\n①登録データ → サーバー送信\n②製品マスター → DB 更新\n（24 時間キャッシュ）"]
-        RC["Retrofit HTTP クライアント\nX-API-KEY ヘッダー付き"]
+        subgraph UI["UI レイヤー"]
+            LC["Login / 工事・工程選択"]
+            CAM["Camera / Gallery 撮影"]
+            CONF["認識結果確認・修正"]
+            HIST["登録履歴表示"]
+        end
+
+        subgraph OCR["AI 認識エンジン（ONNX Runtime）"]
+            PRE["ImagePreprocessor\n(Resize / Contrast)"]
+            DET["DBNet (det.onnx)\nテキスト領域検出"]
+            CROP["Perspective Crop\n多角形領域切り出し"]
+            REC["SVTR (ppocr_rec.onnx)\n文字認識 (0°/180°)"]
+        end
+
+        subgraph MATCH["照合エンジン"]
+            LM["LabelMatcher\nLevenshtein 距離計算"]
+            VAR["バリアント生成\n(0↔O, 1↔I, etc.)"]
+        end
+
+        subgraph DATA["データ管理層"]
+            DB[("Room Database (SQLite)")]
+            subgraph Tables["Tables"]
+                T_REG["registrations (未同期データ)"]
+                T_PROD["product_labels (製品コード)"]
+                T_CONS["constructions (工事名)"]
+                T_PROC["processes (工程名)"]
+            end
+        end
+
+        subgraph SYNC["同期制御 (WorkManager)"]
+            SW["SyncWorker (15分間隔)"]
+            SM["SyncManager"]
+        end
+
+        RC["Retrofit (HTTP Client)\nAPI Key 認証"]
     end
 
-    subgraph LAN["🌐 LAN（同一ネットワーク）"]
-        MDNS["mDNS 自動発見\n_crossvision._tcp.local.\nZeroconf サービス広告"]
+    subgraph NET["🌐 LAN / Wi-Fi"]
+        MDNS["mDNS / Zeroconf\n(_crossvision._tcp.local.)"]
     end
 
-    subgraph SRV["🖥️ FastAPI サーバー（PC / Windows）"]
+    subgraph SRV["🖥️ FastAPI サーバー (Windows)"]
         direction TB
-        API["REST API\nPOST /api/registrations\nGET  /api/registrations\nGET  /api/export/csv\nGET  /health"]
-        DASH["管理ダッシュボード\ndashboard.html\nhttp://localhost:5000/admin"]
-        JSON[("registrations.json\n登録データ永続化")]
+        API["REST API (Python)"]
+        DASH["管理ダッシュボード\n(Realtime Monitor)"]
+        STORAGE[("registrations.json\n永続化ストレージ")]
+        CSV["CSV Exporter"]
     end
 
-    UI -->|撮影画像| OCR
-    OCR -->|テキスト候補| LM
-    LM -->|照合済み製品コード| UI
-    UI -->|登録確定| DB
-    DB -->|未同期データ| SW
+    %% Flows
+    CAM --> PRE
+    PRE --> DET
+    DET --> CROP
+    CROP --> REC
+    REC --> LM
+    LM <--> VAR
+    LM --> CONF
+    CONF --> DB
+    
+    DB --> SW
     SW --> SM
     SM --> RC
-    MDNS -->|サーバー IP:Port を通知| RC
-    RC -->|HTTP POST 登録送信| API
-    RC -.->|HTTP GET マスター取得 TODO| API
-    API --> JSON
-    DASH -->|データ参照| JSON
+    
+    MDNS -.->|IP/Port 発見| RC
+    RC <-->|登録データ送信 / マスター取得| API
+    API <--> STORAGE
+    API <--> DASH
+    DASH --> CSV
 ```
 
 ### 構成の補足
 
 | コンポーネント | 技術 | 説明 |
 |---|---|---|
-| OCR 領域検出 | DBNet / `det.onnx` | 刻印文字の領域を多角形で検出（PP-OCRv4） |
-| OCR 文字認識 | SVTR / `ppocr_rec.onnx` | 検出領域から文字列を読み取り（PP-OCRv4） |
-| 照合エンジン | Levenshtein 距離 | OCR 誤認識を許容しながら製品コードを照合 |
-| ローカル DB | Room（SQLite） | 登録データ＋製品コードマスター（v2 で `product_labels` テーブル追加） |
-| バックグラウンド同期 | WorkManager | オンライン時に 15 分間隔で自動実行 |
-| サーバー自動発見 | Zeroconf / mDNS | IP 手入力なしでアプリがサーバーを自動検出 |
-| バックエンドサーバー | FastAPI（Python） | 登録受信・CSV 出力・管理ダッシュボードを提供 |
+| **UI レイヤー** | Material Components | ログイン、工事・工程選択、カメラ撮影、認識結果の修正・登録、履歴表示を提供 |
+| **OCR エンジン** | PP-OCRv4 (DBNet + SVTR) | ONNX Runtime を使用し、端末内でテキスト領域検出と文字認識を完結。リサイズや回転補正の前処理を含む |
+| **照合エンジン** | Levenshtein 距離 | OCR 誤認識（0/O, 1/I 等）を正規化し、製品マスターと照合。編集距離 3 以内を許容 |
+| **ローカル DB** | Room (SQLite) | オフライン動作のための基盤。登録データ、製品マスター、工事・工程、ユーザー情報を永続化 |
+| **バックグラウンド同期** | WorkManager | 15 分間隔で未送信データを自動送信し、24 時間ごとに製品マスターを自動更新 |
+| **サーバー自動発見** | Zeroconf (mDNS) | ローカルネットワーク内のサーバーを自動検出し、IP 手入力を不要にする |
+| **バックエンド** | FastAPI (Python) | 登録データの受信（registrations.json）、管理ダッシュボード、CSV 書き出しを担当 |
 
 ---
 
