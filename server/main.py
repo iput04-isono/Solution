@@ -365,6 +365,12 @@ if __name__ == "__main__":
     # ポート5000で起動 (Androidアプリのデフォルト)
     port = 5000
     
+    print("==================================================")
+    print("CrossVision F 管理サーバー 起動中")
+    print(f"管理画面: http://localhost:{port}/admin")
+    print("APIキー認証と、自動発見サービスが有効です")
+    print("==================================================")
+    
     discovery = DiscoveryServer(port)
     discovery.start()
     
