@@ -117,7 +117,6 @@ HTML_PAGE = """<!DOCTYPE html>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>鉄骨認識 ダッシュボード</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -154,7 +153,7 @@ body{font-family:'Segoe UI','Helvetica Neue',sans-serif;background:var(--bg);col
 .btn-ghost:hover{color:var(--text)}
 
 /* カード */
-.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.cards{display:grid;grid-template-columns:1fr;gap:16px}
 .card{background:var(--surface);border-radius:var(--radius);padding:20px;display:flex;align-items:center;gap:16px;box-shadow:var(--shadow);border-top:3px solid transparent;transition:transform .15s}
 .card:hover{transform:translateY(-2px)}
 .card-blue{border-color:var(--blue)}.card-green{border-color:var(--green)}.card-red{border-color:var(--red)}.card-yellow{border-color:var(--yellow)}
@@ -163,10 +162,6 @@ body{font-family:'Segoe UI','Helvetica Neue',sans-serif;background:var(--bg);col
 .card-value{font-size:30px;font-weight:800;line-height:1}
 .card-blue .card-value{color:var(--blue)}.card-green .card-value{color:var(--green)}.card-red .card-value{color:var(--red)}.card-yellow .card-value{color:var(--yellow)}
 
-/* グラフ */
-.charts{display:grid;grid-template-columns:2fr 1fr;gap:16px}
-.chart-box{background:var(--surface);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}
-.chart-title{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:16px}
 
 /* フィルター */
 .filter-bar{background:var(--surface);border-radius:var(--radius);padding:16px 20px;box-shadow:var(--shadow);display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
@@ -215,16 +210,9 @@ tbody tr:hover td{background:#f5f8ff}
 
   <main class="content">
     <section class="cards">
-      <div class="card card-blue">  <div class="card-icon">📦</div><div class="card-body"><div class="card-label">総件数</div><div class="card-value" id="cTotal">—</div></div></div>
-      <div class="card card-green"> <div class="card-icon">📥</div><div class="card-body"><div class="card-label">入庫</div>  <div class="card-value" id="cIn">—</div></div></div>
-      <div class="card card-red">   <div class="card-icon">📤</div><div class="card-body"><div class="card-label">出庫</div>  <div class="card-value" id="cOut">—</div></div></div>
-      <div class="card card-yellow"><div class="card-icon">📅</div><div class="card-body"><div class="card-label">今日</div>  <div class="card-value" id="cToday">—</div></div></div>
+      <div class="card card-blue">  <div class="card-icon">📦</div><div class="card-body"><div class="card-label">総登録件数</div><div class="card-value" id="cTotal">—</div></div></div>
     </section>
 
-    <section class="charts">
-      <div class="chart-box"><div class="chart-title">日別 入庫 / 出庫 件数（直近7日）</div><canvas id="barChart"></canvas></div>
-      <div class="chart-box"><div class="chart-title">入庫 / 出庫 比率</div><canvas id="pieChart"></canvas></div>
-    </section>
 
     <section class="filter-bar">
       <div class="filter-group"><label class="filter-label">日付</label><input type="date" id="filterDate" class="filter-input"/></div>
@@ -262,25 +250,10 @@ async function fetchData(){
 }
 
 function updateCards(){
-  const today=new Date().toISOString().slice(0,10);
   document.getElementById('cTotal').textContent=allData.length;
-  document.getElementById('cIn').textContent=allData.filter(d=>d.division==='start').length;
-  document.getElementById('cOut').textContent=allData.filter(d=>d.division==='end').length;
-  document.getElementById('cToday').textContent=allData.filter(d=>(d.received_at||'').startsWith(today)).length;
 }
 
-function updateCharts(){
-  const days=[...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-(6-i));return d.toISOString().slice(0,10)});
-  const inC=days.map(d=>allData.filter(e=>e.division==='start'&&(e.received_at||'').startsWith(d)).length);
-  const outC=days.map(d=>allData.filter(e=>e.division==='end'&&(e.received_at||'').startsWith(d)).length);
-  if(barChart)barChart.destroy();
-  barChart=new Chart(document.getElementById('barChart'),{type:'bar',data:{labels:days.map(d=>d.slice(5)),datasets:[
-    {label:'入庫',data:inC,backgroundColor:'#10b98166',borderColor:'#10b981',borderWidth:2,borderRadius:6},
-    {label:'出庫',data:outC,backgroundColor:'#ef444466',borderColor:'#ef4444',borderWidth:2,borderRadius:6}
-  ]},options:{responsive:true,plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true,ticks:{stepSize:1},grid:{color:'#f0f0f0'}},x:{grid:{display:false}}}}});
-  if(pieChart)pieChart.destroy();
-  pieChart=new Chart(document.getElementById('pieChart'),{type:'doughnut',data:{labels:['入庫','出庫'],datasets:[{data:[allData.filter(d=>d.division==='start').length,allData.filter(d=>d.division==='end').length],backgroundColor:['#10b981cc','#ef4444cc'],borderWidth:0,hoverOffset:8}]},options:{responsive:true,cutout:'65%',plugins:{legend:{position:'bottom'}}}});
-}
+function updateCharts(){}
 
 function getFiltered(){
   const date=document.getElementById('filterDate').value;

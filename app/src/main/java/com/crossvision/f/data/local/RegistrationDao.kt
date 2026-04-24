@@ -17,10 +17,10 @@ interface RegistrationDao {
     @Query("SELECT * FROM registrations WHERE syncStatus = :status ORDER BY registeredAt ASC")
     suspend fun getByStatus(status: SyncStatus): List<Registration>
 
-    @Query("SELECT * FROM registrations WHERE syncStatus = 'PENDING' OR syncStatus = 'FAILED'")
+    @Query("SELECT * FROM registrations WHERE syncStatus IN ('PENDING', 'FAILED', 'SYNCING')")
     suspend fun getUnsyncedRegistrations(): List<Registration>
 
-    @Query("SELECT COUNT(*) FROM registrations WHERE syncStatus = 'PENDING' OR syncStatus = 'FAILED'")
+    @Query("SELECT COUNT(*) FROM registrations WHERE syncStatus IN ('PENDING', 'FAILED', 'SYNCING')")
     fun getUnsyncedCount(): LiveData<Int>
 
     @Query("SELECT * FROM registrations WHERE productCode LIKE '%' || :query || '%' OR constructionName LIKE '%' || :query || '%' ORDER BY registeredAt DESC")
