@@ -79,7 +79,7 @@ git checkout prototype
 
 > **Windows の場合**：Samsung 端末は [Samsung USB Driver](https://developer.samsung.com/mobile/android-usb-driver.html) の別途インストールが必要です
 
-### Step 4. ビルド＆インストール
+### Step 5. ビルド＆インストール
 
 **Android Studio から実行する場合：**
 
@@ -143,7 +143,7 @@ git checkout prototype
 | `det.onnx` | テキスト領域検出モデル（PP-OCRv4 DBNet） |
 | `ppocr_rec.onnx` | 文字認識モデル（PP-OCRv4 SVTR mobile） |
 | `dict.txt` | 認識文字辞書 |
-| `product_labels.txt` | 正解ラベルマスター（1017 件） |
+| `product_labels.txt` | 製品コードマスター初期データ（1017 件）。アプリ起動後はサーバー同期で Room DB に保存され、DB が優先して使われる |
 
 > ⚠️ `det.onnx` は 83MB のため、GitHub の推奨上限（50MB）を超えています。  
 > Git Large File Storage（LFS）への移行を今後検討してください。
@@ -175,7 +175,7 @@ git checkout prototype
         │
         ▼
 ④ ラベルマッチング（LabelMatcher）
-  　認識テキストと正解ラベルマスター（1017 件）を比較
+  　認識テキストと製品コードマスター（Room DB 優先 / assets フォールバック）を比較
   　→ 編集距離 ≤ 3 なら「登録候補」、4 以上なら「参考」に分類
         │
         ▼
@@ -273,6 +273,8 @@ return if (rotatedDist < normalDist) rotatedResult else normalResult
 
 ### ④ ラベルマッチング（Levenshtein 距離）
 
+> **データソース**：製品コードは Room DB（サーバー同期済み）を優先して読み込みます。DB が空の場合は `assets/product_labels.txt`（初期データ 1017 件）にフォールバックします。サーバー同期は WorkManager が 24 時間ごとにバックグラウンドで自動実行します。
+
 #### Levenshtein 距離（編集距離）とは
 
 2 つの文字列の「**似ている度合い**」を数値化する方法です。  
@@ -329,26 +331,55 @@ return if (rotatedDist < normalDist) rotatedResult else normalResult
 ```
 app/src/main/java/com/crossvision/f/
 ├── data/
-│   ├── local/          # Room DB（ユーザー・工事・工程・登録データ）
-│   ├── model/          # データモデル
-│   └── repository/     # DB ↔ UI の橋渡し
+│   ├── local/
+│   │   ├── AppDatabase.kt        # Room DB 定義（v2）・マイグレーション管理
+│   │   ├── ProductLabelDao.kt    # 製品コードマスター DAO
+│   │   ├── ConstructionDao.kt    # 工事データ DAO
+│   │   ├── ProcessDao.kt         # 工程データ DAO
+│   │   ├── RegistrationDao.kt    # 登録データ DAO
+│   │   └── UserDao.kt            # ユーザーデータ DAO
+│   ├── model/
+│   │   ├── ProductLabel.kt       # 製品コードマスターエンティティ
+│   │   ├── Construction.kt       # 工事エンティティ
+│   │   ├── Process.kt            # 工程エンティティ
+│   │   ├── Registration.kt       # 登録エンティティ
+│   │   └── User.kt               # ユーザーエンティティ
+│   └── repository/
+│       └── AppRepository.kt      # DB ↔ UI の橋渡し（製品コード操作含む）
 ├── ocr/
-│   ├── OcrEngine.kt    # PaddleOCR 推論（DBNet + SVTR）
-│   ├── LabelMatcher.kt # Levenshtein 距離によるラベル照合
-│   ├── OcrProcessor.kt # 認識結果を登録候補 / 参考に分類
-│   └── ImagePreprocessor.kt # リサイズ前処理（長辺 1280px）
+│   ├── OcrEngine.kt              # PaddleOCR 推論（DBNet + SVTR）
+│   ├── LabelMatcher.kt           # Levenshtein 距離によるラベル照合（DB 優先）
+│   ├── OcrProcessor.kt           # 認識結果を登録候補 / 参考に分類
+│   ├── OcrResult.kt              # 認識結果データクラス
+│   ├── ProductCodeValidator.kt   # 製品コード形式バリデーション
+│   └── ImagePreprocessor.kt      # リサイズ前処理（長辺 1280px）
 ├── sync/
-│   ├── SyncWorker.kt   # WorkManager によるサーバー自動同期
-│   └── SyncManager.kt
+│   ├── SyncWorker.kt             # WorkManager バックグラウンドタスク
+│   └── SyncManager.kt            # 登録データ同期 + 製品コードマスター更新
 ├── ui/
-│   ├── login/          # ログイン画面
-│   ├── process/        # 工事・工程選択画面
-│   ├── camera/         # CameraX カメラ画面
-│   ├── recognize/      # 画像選択・OCR 実行画面
-│   ├── confirm/        # 認識結果確認・登録画面
-│   ├── register/       # 登録完了画面
-│   └── library/        # 登録履歴一覧画面
-└── CrossVisionApp.kt   # Application クラス
+│   ├── login/                    # ログイン画面
+│   ├── process/                  # 工事・工程選択画面
+│   ├── camera/                   # CameraX カメラ画面
+│   ├── recognize/                # 画像選択・OCR 実行画面
+│   ├── confirm/                  # 認識結果確認・登録画面
+│   ├── register/                 # 登録完了画面
+│   └── library/                  # 登録履歴一覧画面
+└── CrossVisionApp.kt             # Application クラス（WorkManager 初期化）
+```
+
+**テスト・スクリプト：**
+
+```
+app/src/androidTest/java/com/crossvision/f/
+└── ProductLabelSyncTest.kt  # 製品コード同期の実機インストゥルメンテッドテスト（5ケース）
+
+scripts/
+├── install_all.ps1          # 接続全デバイスへ一括インストール
+└── test_label_sync.ps1      # 製品コード同期の自動テスト（PowerShell）
+
+server/
+├── main.py                  # 開発用ローカルサーバー（FastAPI）
+└── requirements.txt         # Python 依存ライブラリ
 ```
 
 ---
@@ -356,25 +387,27 @@ app/src/main/java/com/crossvision/f/
 ## ブランチ運用ルール
 
 ```
-prototype ← 動作確認済みの統合ブランチ（このブランチ）
-develop   ← OCR エンジン基盤
-feature/* ← 機能ごとの作業ブランチ
+prototype          ← 動作確認済みの統合ブランチ（リリース相当）
+prototype_develop  ← prototype への統合前の開発ブランチ
+feature/*          ← 機能ごとの作業ブランチ
 ```
 
 ### 開発フロー
 
 ```bash
-# 1. prototype から作業ブランチを切る
-git checkout prototype
-git pull origin prototype
+# 1. prototype_develop から作業ブランチを切る
+git checkout prototype_develop
+git pull origin prototype_develop
 git checkout -b feature/機能名
 
 # 2. 作業してコミット
 git add .
 git commit -m "feat: 機能の説明"
 
-# 3. prototype へ Pull Request を出す
+# 3. prototype_develop へ Pull Request を出す
 git push origin feature/機能名
+# → PR: feature/機能名 → prototype_develop
+# → 動作確認後、prototype_develop → prototype へ PR
 ```
 
 ### コミットメッセージのルール
