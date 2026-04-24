@@ -187,7 +187,7 @@ cd Solution
 | 機能 | 説明 |
 |---|---|
 | **自動発見 (mDNS/Zeroconf)** | 起動と同時に `_crossvision._tcp.local.` でサービスを広告。アプリが IP アドレス不要で自動接続 |
-| **管理ダッシュボード** | `http://localhost:5000/admin` でリアルタイムに登録状況を確認 |
+| **管理ダッシュボード** | `http://localhost:5000/admin` でリアルタイムに登録状況を確認。<br>単一削除・一括削除機能、工事名・工程名による検索機能を搭載 |
 | **API キー認証** | `X-API-KEY: cvf_7s_9922_zrkp_8x11` ヘッダーによる認証 |
 | **CSV エクスポート** | `GET /api/export/csv` で Excel 対応の CSV をダウンロード |
 
@@ -197,6 +197,8 @@ cd Solution
 |---|---|---|---|
 | `POST` | `/api/registrations` | 登録データ受信・保存 | ✅ 必要 |
 | `GET` | `/api/registrations` | 登録データ一覧取得 | ❌ 不要 |
+| `DELETE` | `/api/registrations/{id}` | 登録データの単一削除 | ✅ 必要 |
+| `DELETE` | `/api/registrations` | 登録データの一括削除 | ✅ 必要 |
 | `GET` | `/api/export/csv` | CSV ダウンロード | ❌ 不要 |
 | `GET` | `/health` | サーバー死活確認 | ❌ 不要 |
 | `GET` | `/admin` | 管理ダッシュボード | ❌ 不要 |
@@ -597,6 +599,7 @@ git push origin feature/機能名
 
 | バージョン | 日付 | 内容 |
 |---|---|---|
+| Ver 2.1 | 2026-04-24 | サーバー管理画面の強化（単一/一括削除、フィルター）、およびAndroidとサーバー間の「工事名」「工程名」の直接連携対応 |
 | Ver 2.0 | 2026-04-24 | 製品コードマスターの Room DB 管理化・サーバー自動同期機能を統合（GroupA × チームメンバー機能マージ） |
 | Ver 1.x | 〜2026-04-23 | OCR 認識・登録・履歴・オフライン同期の基本機能実装 |
 
