@@ -66,9 +66,17 @@ class SyncWorker(
 
         return try {
             val syncManager = SyncManager(applicationContext)
-            val syncedCount = syncManager.syncPendingRegistrations()
 
-            Log.i(TAG, "同期完了: ${syncedCount}件を送信しました")
+            // 1. 登録データをサーバーへ送信（既存処理）
+            val syncedCount = syncManager.syncPendingRegistrations()
+            Log.i(TAG, "登録データ同期完了: ${syncedCount}件を送信しました")
+
+            // 2. 製品コードマスターをサーバーから取得して DB を更新（新規追加）
+            val labelCount = syncManager.syncProductLabels()
+            if (labelCount >= 0) {
+                Log.i(TAG, "製品コード同期完了: ${labelCount}件を更新しました")
+            }
+
             Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "同期エラー: ${e.message}", e)
