@@ -14,6 +14,8 @@ import com.crossvision.f.data.repository.AppRepository
 import com.crossvision.f.databinding.ActivityRegisterBinding
 import com.crossvision.f.sync.SyncManager
 import com.crossvision.f.sync.SyncWorker
+import com.crossvision.f.ui.process.ProcessSelectionActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.material.chip.Chip
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
@@ -31,6 +33,20 @@ class RegisterActivity : AppCompatActivity() {
     private var constructionName = ""
     private var processName = ""
     private var userId = ""
+
+    // 工事・工程変更用ランチャー
+    private val editProcessLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val data = result.data
+            if (data != null) {
+                constructionName = data.getStringExtra("CONSTRUCTION_NAME") ?: constructionName
+                processName = data.getStringExtra("PROCESS_NAME") ?: processName
+                updateProcessInfoUI()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,13 +82,28 @@ class RegisterActivity : AppCompatActivity() {
         }
 
         // 工事・工程情報の表示
-        binding.tvConstructionName.text = "工事名: $constructionName"
-        binding.tvProcessName.text = "工程名: $processName"
+        updateProcessInfoUI()
+
+        // 変更ボタン
+        binding.btnEditProcess.setOnClickListener {
+            val intent = android.content.Intent(this, ProcessSelectionActivity::class.java).apply {
+                putExtra("USER_ID", userId)
+                putExtra("EDIT_MODE", true)
+            }
+            editProcessLauncher.launch(intent)
+        }
 
         // 登録ボタン
         binding.btnRegister.setOnClickListener {
             performRegistration()
         }
+    }
+
+    private fun updateProcessInfoUI() {
+        val displayConst = if (constructionName.isNotEmpty()) constructionName else "未指定"
+        val displayProc = if (processName.isNotEmpty()) processName else "未指定"
+        binding.tvConstructionName.text = "工事名: $displayConst"
+        binding.tvProcessName.text = "工程名: $displayProc"
     }
 
     private fun performRegistration() {
