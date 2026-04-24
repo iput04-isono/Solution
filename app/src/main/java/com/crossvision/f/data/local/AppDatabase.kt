@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.crossvision.f.data.model.*
 import kotlinx.coroutines.CoroutineScope
@@ -13,6 +14,9 @@ import kotlinx.coroutines.launch
 /**
  * アプリのRoom Database
  * シングルトンパターンでインスタンスを管理
+ *
+ * バージョン履歴:
+ *   v1 → v2: product_labels テーブルを追加（製品コードマスターのDB管理化）
  */
 @Database(
     entities = [
@@ -20,9 +24,10 @@ import kotlinx.coroutines.launch
         Process::class,
         RecognizedProduct::class,
         Registration::class,
-        User::class
+        User::class,
+        ProductLabel::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -31,10 +36,28 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun processDao(): ProcessDao
     abstract fun registrationDao(): RegistrationDao
     abstract fun userDao(): UserDao
+    abstract fun productLabelDao(): ProductLabelDao
 
     companion object {
         @Volatile
         private var INSTANCE: AppDatabase? = null
+
+        /**
+         * v1 → v2 マイグレーション
+         * product_labels テーブルを追加する
+         */
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS product_labels (
+                        code TEXT NOT NULL PRIMARY KEY,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -43,6 +66,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "crossvision_db"
                 )
+                    .addMigrations(MIGRATION_1_2)
                     .addCallback(DatabaseCallback())
                     .build()
                 INSTANCE = instance
