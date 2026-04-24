@@ -23,7 +23,13 @@ data class RegistrationRequest(
     val registeredAt: String,
 
     @SerializedName("product_numbers")
-    val productNumbers: List<String>
+    val productNumbers: List<String>,
+
+    @SerializedName("construction_name")
+    val constructionName: String? = null,
+
+    @SerializedName("process_name")
+    val processName: String? = null
 )
 
 /**

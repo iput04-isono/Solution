@@ -7,7 +7,7 @@ from fastapi import FastAPI, Response, Security, HTTPException, Depends
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 import json, os, csv, io, socket, starlette.status
 from zeroconf import IPVersion, ServiceInfo, Zeroconf
@@ -25,10 +25,15 @@ class RegistrationRequest(BaseModel):
     device_id: str
     registered_at: str
     product_numbers: List[str]
+    construction_name: Optional[str] = None
+    process_name: Optional[str] = None
 
 class RegistrationResponse(BaseModel):
     success: bool
     message: str | None = None
+
+class BulkDeleteRequest(BaseModel):
+    ids: List[int]
 
 # ── セキュリティ ─────────────────────────────────────────
 
@@ -71,6 +76,8 @@ def post_registration(req: RegistrationRequest, api_key: str = Depends(get_api_k
         "device_id": req.device_id,
         "registered_at": req.registered_at,
         "product_numbers": req.product_numbers,
+        "construction_name": req.construction_name,
+        "process_name": req.process_name,
         "received_at": datetime.now().isoformat(),
     }
     data.append(entry)
@@ -82,6 +89,30 @@ def post_registration(req: RegistrationRequest, api_key: str = Depends(get_api_k
 def get_registrations():
     return load_data()
 
+@app.delete("/api/registrations/{entry_id}", response_model=RegistrationResponse)
+def delete_registration(entry_id: int, api_key: str = Depends(get_api_key)):
+    """単一データを削除する"""
+    data = load_data()
+    new_data = [d for d in data if d.get("id") != entry_id]
+    if len(new_data) == len(data):
+        raise HTTPException(status_code=404, detail=f"ID {entry_id} が見つかりません")
+    save_data(new_data)
+    print(f"[削除] ID={entry_id}")
+    return RegistrationResponse(success=True, message=f"ID {entry_id} を削除しました")
+
+@app.delete("/api/registrations", response_model=RegistrationResponse)
+def bulk_delete_registrations(req: BulkDeleteRequest, api_key: str = Depends(get_api_key)):
+    """複数データを一括削除する"""
+    if not req.ids:
+        raise HTTPException(status_code=400, detail="削除対象のIDが指定されていません")
+    data = load_data()
+    id_set = set(req.ids)
+    new_data = [d for d in data if d.get("id") not in id_set]
+    deleted_count = len(data) - len(new_data)
+    save_data(new_data)
+    print(f"[一括削除] {deleted_count}件削除 IDs={sorted(id_set)}")
+    return RegistrationResponse(success=True, message=f"{deleted_count}件を削除しました")
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -91,12 +122,13 @@ def export_csv():
     data = load_data()
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["ID", "区分", "製品番号", "受信日時", "デバイスID"])
+    writer.writerow(["ID", "工事名", "工程名", "製品番号", "受信日時", "デバイスID"])
     for entry in data:
-        div = "入庫" if entry.get("division") == "start" else "出庫"
+        const_name = entry.get("construction_name") or "—"
+        proc_name = entry.get("process_name") or "—"
         numbers = ", ".join(entry.get("product_numbers", []))
         received = entry.get("received_at", "")[:19].replace("T", " ")
-        writer.writerow([entry.get("id"), div, numbers, received, entry.get("device_id", "")])
+        writer.writerow([entry.get("id"), const_name, proc_name, numbers, received, entry.get("device_id", "")])
     csv_bytes = ("\ufeff" + output.getvalue()).encode("utf-8")
     return Response(
         content=csv_bytes,

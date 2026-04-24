@@ -57,7 +57,9 @@ class SyncManager(private val context: Context) {
                     workerId = 1,
                     deviceId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID),
                     registeredAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).format(java.util.Date(item.registeredAt)),
-                    productNumbers = listOf(item.productCode)
+                    productNumbers = listOf(item.productCode),
+                    constructionName = item.constructionName,
+                    processName = item.processName
                 )
 
                 val response = com.crossvision.f.data.api.RetrofitClient.apiService.postRegistration(request)
