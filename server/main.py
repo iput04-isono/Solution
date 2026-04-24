@@ -3,12 +3,13 @@
 起動方法: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 """
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, Security, HTTPException, Depends
+from fastapi.security.api_key import APIKeyHeader
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import List
 from datetime import datetime
-import json, os, csv, io
+import json, os, csv, io, starlette.status
 
 app = FastAPI(title="鉄骨認識サーバー（開発用）")
 
@@ -28,6 +29,20 @@ class RegistrationResponse(BaseModel):
     success: bool
     message: str | None = None
 
+# ── セキュリティ ─────────────────────────────────────────
+
+API_KEY = "cvf_7s_9922_zrkp_8x11"
+API_KEY_NAME = "X-API-KEY"
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+async def get_api_key(header_key: str = Depends(api_key_header)):
+    if header_key == API_KEY:
+        return header_key
+    raise HTTPException(
+        status_code=starlette.status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid API Key"
+    )
+
 # ── データ保存 ──────────────────────────────────────────
 
 DATA_FILE = os.path.join(BASE_DIR, "registrations.json")
@@ -45,7 +60,7 @@ def save_data(data: list):
 # ── API ─────────────────────────────────────────────────
 
 @app.post("/api/registrations", response_model=RegistrationResponse)
-def post_registration(req: RegistrationRequest):
+def post_registration(req: RegistrationRequest, api_key: str = Depends(get_api_key)):
     data = load_data()
     entry = {
         "id": len(data) + 1,
