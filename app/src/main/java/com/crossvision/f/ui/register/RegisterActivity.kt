@@ -100,13 +100,19 @@ class RegisterActivity : AppCompatActivity() {
                 }
 
                 repository.insertRegistrations(registrations)
-
+                
                 // オンラインなら即座に同期を試行
                 if (isOnline) {
-                    SyncWorker.executeImmediateSync(applicationContext)
-                    showSuccessMessage("登録が完了しました（${productCodes.size}件）\nサーバーへ送信されました")
+                    val syncedCount = syncManager.syncPendingRegistrations()
+                    if (syncedCount == productCodes.size) {
+                        showSuccessMessage("登録完了：${productCodes.size}件\nサーバーへの送信も正常に完了しました。")
+                    } else if (syncedCount > 0) {
+                        showSuccessMessage("一部送信完了：${syncedCount}/${productCodes.size}件\n残りのデータは通信環境が改善し次第、自動的に再送されます。")
+                    } else {
+                        showSuccessMessage("ローカル保存完了：${productCodes.size}件\nサーバーへの送信に失敗しました。データは安全に保存されており、後で自動的に再送されます。")
+                    }
                 } else {
-                    showSuccessMessage("オフラインで保存しました（${productCodes.size}件）\nネットワーク復帰時に自動で送信されます")
+                    showSuccessMessage("オフライン保存：${productCodes.size}件\n現在は通信できないため、端末内に保存しました。ネットワーク復帰時に自動で送信されます。")
                 }
 
             } catch (e: Exception) {
