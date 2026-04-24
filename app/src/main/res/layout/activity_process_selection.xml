@@ -29,34 +29,64 @@
             android:orientation="vertical"
             android:padding="@dimen/spacing_lg">
 
-            <!-- 対象区分選択 (製品/部品/置き場) -->
-            <com.google.android.material.button.MaterialButtonToggleGroup
-                android:id="@+id/toggleCategory"
+            <!-- 対象区分選択 (製品/部品) + アクションボタン -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="@dimen/spacing_lg"
-                app:singleSelection="true"
-                app:selectionRequired="true"
-                app:checkedButton="@+id/btnCategoryProduct">
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="@dimen/spacing_lg">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnCategoryProduct"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
+                <com.google.android.material.button.MaterialButtonToggleGroup
+                    android:id="@+id/toggleCategory"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="@string/category_product" />
+                    app:singleSelection="true"
+                    app:selectionRequired="true"
+                    app:checkedButton="@+id/btnCategoryProduct">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnCategoryPart"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/category_part" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnCategoryProduct"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/category_product" />
 
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnCategoryPart"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/category_part" />
 
-            </com.google.android.material.button.MaterialButtonToggleGroup>
+                </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                <!-- 再読み込みアイコンボタン -->
+                <ImageButton
+                    android:id="@+id/btnReload"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:src="@drawable/ic_sync"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    app:tint="@color/primary"
+                    android:contentDescription="再読込" />
+
+                <!-- ログアウトアイコンボタン -->
+                <ImageButton
+                    android:id="@+id/btnLogout"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="@dimen/spacing_xs"
+                    android:src="@drawable/ic_logout"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    app:tint="@color/text_secondary"
+                    android:contentDescription="ログアウト" />
+
+            </LinearLayout>
 
             <!-- 説明テキスト -->
             <TextView
@@ -165,39 +195,22 @@
         android:elevation="8dp">
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnReload"
-            style="@style/SecondaryButton"
-            android:layout_width="0dp"
-            android:layout_height="@dimen/button_height"
-            android:layout_weight="0.8"
-            android:text="再読込"
-            android:layout_marginEnd="@dimen/spacing_xs" />
-
-        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnHistory"
             style="@style/SecondaryButton"
             android:layout_width="0dp"
             android:layout_height="@dimen/button_height"
             android:layout_weight="1"
             android:text="履歴"
-            android:layout_marginEnd="@dimen/spacing_xs" />
+            android:layout_marginEnd="@dimen/spacing_sm" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnNext"
             style="@style/PrimaryButton"
             android:layout_width="0dp"
             android:layout_height="@dimen/button_height"
-            android:layout_weight="1.2"
+            android:layout_weight="1"
             android:text="@string/btn_next"
-            android:enabled="false"
-            android:layout_marginEnd="@dimen/spacing_xs" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnLogout"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="@dimen/button_height"
-            android:text="終了" />
+            android:enabled="false" />
 
     </LinearLayout>
 

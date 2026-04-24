@@ -28,9 +28,6 @@ class SyncManager(private val context: Context) {
 
     /**
      * 未送信データをサーバーに同期する
-     * オンライン復帰時に呼び出される
-     *
-     * @return 同期成功した件数
      */
     suspend fun syncPendingRegistrations(): Int {
         if (!isNetworkAvailable()) return 0
@@ -40,14 +37,21 @@ class SyncManager(private val context: Context) {
 
         for (item in unsyncedItems) {
             try {
-                // ステータスを「送信中」に更新
                 repository.updateSyncStatus(item.id, SyncStatus.SYNCING)
 
-                // TODO: 実際のAPI呼び出しに置き換える
-                // val response = apiService.sendRegistration(item)
-                val isSuccess = simulateApiCall()
+                // サーバーへ送信
+                val request = com.crossvision.f.data.model.RegistrationRequest(
+                    process_id = 1, // TODO: IDの動的取得
+                    division = if (item.processName.contains("入")) "start" else "end",
+                    worker_id = 1,
+                    device_id = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID),
+                    registered_at = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).format(java.util.Date(item.registeredAt)),
+                    product_numbers = listOf(item.productCode)
+                )
 
-                if (isSuccess) {
+                val response = com.crossvision.f.data.api.RetrofitClient.apiService.postRegistration(request)
+
+                if (response.isSuccessful && response.body()?.success == true) {
                     repository.updateSyncStatus(
                         item.id,
                         SyncStatus.SYNCED,
@@ -58,21 +62,11 @@ class SyncManager(private val context: Context) {
                     repository.updateSyncStatus(item.id, SyncStatus.FAILED)
                 }
             } catch (e: Exception) {
-                // 通信エラー時は失敗ステータスに戻す（データは保持）
+                android.util.Log.e("SyncManager", "Sync failed for item ${item.id}", e)
                 repository.updateSyncStatus(item.id, SyncStatus.FAILED)
             }
         }
 
         return syncedCount
-    }
-
-    /**
-     * API呼び出しのシミュレーション（モック）
-     * 実運用時にはRetrofit等による実際のAPI通信に置き換え
-     */
-    private suspend fun simulateApiCall(): Boolean {
-        // 擬似的な遅延（ネットワーク通信を模擬）
-        kotlinx.coroutines.delay(500)
-        return true // 常に成功を返す（モック）
     }
 }
