@@ -186,13 +186,14 @@ adb shell am start -n com.example.imagepreprocessingtest/.MainActivity
 
 ```
 image-preprocessing/
-├── app/src/main/
-│   ├── java/com/example/imagepreprocessingtest/
-│   │   ├── ImagePreprocessor.kt   ← 前処理ロジック（Step 1 の実装本体）
-│   │   └── MainActivity.kt        ← デモ用 UI
-│   └── assets/images/             ← テスト用鉄骨画像 18 枚
-└── opencv/                        ← OpenCV 4.11 ライブラリ
+└── app/src/main/
+    └── java/com/example/imagepreprocessingtest/
+        ├── ImagePreprocessor.kt   ← 前処理ロジック（Step 1 の実装本体）
+        └── MainActivity.kt        ← デモ用 UI
 ```
+
+> **注意**：テスト用鉄骨画像（`assets/images/`）と OpenCV ライブラリ（`opencv/`）はリポジトリ管理外です。  
+> 画像は Google Drive の共有フォルダから、OpenCV は [OpenCV Releases](https://opencv.org/releases/) からそれぞれ取得してください。
 
 `ImagePreprocessor.kt` が Step 1 の実装本体です。最終的な文字認識アプリに組み込む際は、このクラスをそのまま利用します。
 

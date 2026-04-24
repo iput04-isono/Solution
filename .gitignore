@@ -39,3 +39,10 @@ image-preprocessing/app/src/main/assets/images/
 
 # 作業用PR下書きファイル
 _pr_body*.md
+
+# テスト実行時に生成される一時ファイル
+test_logcat.txt
+
+# Android Studio 自動生成のサンプルテスト（旧パッケージ残骸）
+app/src/androidTest/java/com/example/
+app/src/test/java/com/example/
