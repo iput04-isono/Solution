@@ -105,6 +105,7 @@ def export_csv():
     )
 
 @app.get("/", response_class=HTMLResponse)
+@app.get("/admin", response_class=HTMLResponse)
 def dashboard():
     return HTML_PAGE
 
