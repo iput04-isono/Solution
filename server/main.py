@@ -9,7 +9,8 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import List
 from datetime import datetime
-import json, os, csv, io, starlette.status
+import json, os, csv, io, socket, starlette.status
+from zeroconf import IPVersion, ServiceInfo, Zeroconf
 
 app = FastAPI(title="鉄骨認識サーバー（開発用）")
 
@@ -340,3 +341,60 @@ setInterval(fetchData,10000);
 </script>
 </body>
 </html>"""
+# ── 自動発見 (mDNS/Zeroconf) 配信 ────────────────────────
+
+class DiscoveryServer:
+    def __init__(self, port):
+        self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
+        self.port = port
+        self.service_info = None
+
+    def start(self):
+        try:
+            hostname = socket.gethostname()
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                local_ip = s.getsockname()[0]
+                s.close()
+            except Exception:
+                local_ip = socket.gethostbyname(hostname)
+
+            # サービス名: SevenStarServer (Androidアプリ側がこの名前を探します)
+            desc = {"version": "1.0", "name": "CrossVision-F-Server"}
+            self.service_info = ServiceInfo(
+                "_crossvision._tcp.local.",
+                f"SevenStarServer.{hostname}._crossvision._tcp.local.",
+                addresses=[socket.inet_aton(local_ip)],
+                port=self.port,
+                properties=desc,
+                server=f"{hostname}.local.",
+            )
+            
+            print(f"[*] 自動発見サービスを開始: {local_ip}:{self.port}")
+            self.zeroconf.register_service(self.service_info)
+        except Exception as e:
+            print(f"[!] 自動発見サービスの開始に失敗しました: {e}")
+
+    def stop(self):
+        try:
+            if self.service_info:
+                self.zeroconf.unregister_service(self.service_info)
+            self.zeroconf.close()
+        except:
+            pass
+
+# ── 起動処理 ──────────────────────────────────────────
+
+if __name__ == "__main__":
+    import uvicorn
+    # ポート5000で起動 (Androidアプリのデフォルト)
+    port = 5000
+    
+    discovery = DiscoveryServer(port)
+    discovery.start()
+    
+    try:
+        uvicorn.run(app, host="0.0.0.0", port=port)
+    finally:
+        discovery.stop()
