@@ -13,6 +13,8 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.crossvision.f.databinding.ActivityConfirmBinding
 import com.crossvision.f.ocr.ProductCodeValidator
 import com.crossvision.f.ui.register.RegisterActivity
+import com.crossvision.f.ui.process.ProcessSelectionActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import java.io.File
 
 /**
@@ -26,6 +28,20 @@ class ConfirmActivity : AppCompatActivity() {
     private var constructionName = ""
     private var processName = ""
     private var userId = ""
+
+    // 工事・工程変更用ランチャー
+    private val editProcessLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val data = result.data
+            if (data != null) {
+                constructionName = data.getStringExtra("CONSTRUCTION_NAME") ?: constructionName
+                processName = data.getStringExtra("PROCESS_NAME") ?: processName
+                updateProcessInfoUI()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,7 +62,14 @@ class ConfirmActivity : AppCompatActivity() {
         setupOverlayImage(overlayPath)
         setupRecyclerView(productCodes, rawTexts, debugInfo)
         setupUnmatchedSection(unmatchedTexts)
+        updateProcessInfoUI()
         setupUI()
+    }
+
+    private fun updateProcessInfoUI() {
+        val displayConst = if (constructionName.isNotEmpty()) constructionName else "未指定"
+        val displayProc = if (processName.isNotEmpty()) processName else "未指定"
+        binding.tvProcessInfo.text = "【$displayConst】$displayProc"
     }
 
     private fun setupToolbar() {
@@ -119,6 +142,15 @@ class ConfirmActivity : AppCompatActivity() {
     }
 
     private fun setupUI() {
+        // 工事・工程情報 変更ボタン
+        binding.btnEditProcess.setOnClickListener {
+            val intent = Intent(this, ProcessSelectionActivity::class.java).apply {
+                putExtra("USER_ID", userId)
+                putExtra("EDIT_MODE", true) // 編集モードフラグ
+            }
+            editProcessLauncher.launch(intent)
+        }
+
         // 手動追加ボタン
         binding.btnAddManual.setOnClickListener {
             showAddDialog()

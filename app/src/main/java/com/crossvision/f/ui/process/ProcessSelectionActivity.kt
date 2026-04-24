@@ -26,6 +26,7 @@ class ProcessSelectionActivity : AppCompatActivity() {
     }
 
     private var userId: String = ""
+    private var isEditMode: Boolean = false
     private var constructionList = listOf<Construction>()
     private var processList = listOf<Process>()
 
@@ -35,6 +36,7 @@ class ProcessSelectionActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         userId = intent.getStringExtra("USER_ID") ?: ""
+        isEditMode = intent.getBooleanExtra("EDIT_MODE", false)
 
         setupToolbar()
         setupUI()
@@ -81,18 +83,33 @@ class ProcessSelectionActivity : AppCompatActivity() {
             viewModel.selectProcess(selected)
         }
 
-        // 次へボタン → 画像認識画面へ
+        // 次へボタン / 変更を保存ボタン
+        if (isEditMode) {
+            binding.btnNext.text = "変更を保存"
+        }
+        
         binding.btnNext.setOnClickListener {
             val construction = viewModel.selectedConstruction.value
             val process = viewModel.selectedProcess.value
             if (construction != null && process != null) {
-                val intent = Intent(this, RecognizeActivity::class.java).apply {
-                    putExtra("USER_ID", userId)
-                    putExtra("CATEGORY", viewModel.selectedCategory.value)
-                    putExtra("CONSTRUCTION_NAME", construction.name)
-                    putExtra("PROCESS_NAME", process.name)
+                if (isEditMode) {
+                    // 編集モード：結果を呼び出し元（ConfirmActivity）に返して終了
+                    val resultIntent = Intent().apply {
+                        putExtra("CONSTRUCTION_NAME", construction.name)
+                        putExtra("PROCESS_NAME", process.name)
+                    }
+                    setResult(RESULT_OK, resultIntent)
+                    finish()
+                } else {
+                    // 通常モード：カメラ起動
+                    val intent = Intent(this, RecognizeActivity::class.java).apply {
+                        putExtra("USER_ID", userId)
+                        putExtra("CATEGORY", viewModel.selectedCategory.value)
+                        putExtra("CONSTRUCTION_NAME", construction.name)
+                        putExtra("PROCESS_NAME", process.name)
+                    }
+                    startActivity(intent)
                 }
-                startActivity(intent)
             }
         }
 
