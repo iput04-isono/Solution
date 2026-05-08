@@ -191,8 +191,8 @@ def export_product_labels_csv():
 @app.get("/api/constructions")
 def get_constructions():
     default_constructions = [
-        {"id": 1, "name": "A棟新築工事", "code": "C001", "isActive": True},
-        {"id": 2, "name": "B棟改修工事", "code": "C002", "isActive": True}
+        {"id": 1, "name": "F-M_FQ", "code": "20251111202F", "isActive": True},
+        {"id": 2, "name": "新社屋建設工事", "code": "20250001", "isActive": True}
     ]
     return load_json_list(CONSTRUCTIONS_FILE, default_constructions)
 
@@ -226,10 +226,17 @@ def import_constructions(file: UploadFile = File(...), api_key: str = Depends(ge
 @app.get("/api/processes")
 def get_processes():
     default_processes = [
-        {"id": 1, "constructionId": 1, "name": "入庫", "code": "P001", "isActive": True},
-        {"id": 2, "constructionId": 1, "name": "出庫", "code": "P002", "isActive": True},
-        {"id": 3, "constructionId": 2, "name": "入庫", "code": "P003", "isActive": True},
-        {"id": 4, "constructionId": 2, "name": "出庫", "code": "P004", "isActive": True}
+        {"id": 1, "constructionId": 1, "name": "FINS", "code": "FINS", "isActive": True},
+        {"id": 2, "constructionId": 1, "name": "FAS検査", "code": "FAS", "isActive": True},
+        {"id": 3, "constructionId": 1, "name": "FAILA0", "code": "FAIL", "isActive": True},
+        {"id": 4, "constructionId": 1, "name": "FAW検査", "code": "FAW", "isActive": True},
+        {"id": 5, "constructionId": 1, "name": "CINJA0", "code": "CINJ", "isActive": True},
+        {"id": 6, "constructionId": 1, "name": "建て方管理", "code": "BLD", "isActive": True},
+        {"id": 7, "constructionId": 2, "name": "一次加工", "code": "P01", "isActive": True},
+        {"id": 8, "constructionId": 2, "name": "組立", "code": "P02", "isActive": True},
+        {"id": 9, "constructionId": 2, "name": "溶接", "code": "P03", "isActive": True},
+        {"id": 10, "constructionId": 2, "name": "塗装", "code": "P04", "isActive": True},
+        {"id": 11, "constructionId": 2, "name": "検査", "code": "P05", "isActive": True}
     ]
     return load_json_list(PROCESSES_FILE, default_processes)
 

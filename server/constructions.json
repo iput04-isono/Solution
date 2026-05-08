@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "name": "□□区建設工事",
+    "code": "c001",
+    "isActive": true
+  },
+  {
+    "id": 2,
+    "name": "○○区下水道管工事",
+    "code": "c002",
+    "isActive": true
+  },
+  {
+    "id": 3,
+    "name": "△△区上下水道管工事",
+    "code": "c003",
+    "isActive": true
+  }
+]
