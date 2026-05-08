@@ -13,7 +13,7 @@ class OcrProcessor(private val context: Context) {
 
     private var engine: OcrEngine? = null
     private val preprocessor = ImagePreprocessor()
-    private val labelMatcher: LabelMatcher by lazy { LabelMatcher(context) }
+    private var labelMatcher: LabelMatcher? = null
 
     /**
      * 画像からテキストを認識する
@@ -23,8 +23,11 @@ class OcrProcessor(private val context: Context) {
     suspend fun recognizeText(bitmap: Bitmap): List<DomainOcrResult> = withContext(Dispatchers.Default) {
         // バックグラウンドスレッドで重いモデルを初期化する
         // LabelMatcherを渡すことで向き選択をラベル距離優先にする
+        if (labelMatcher == null) {
+            labelMatcher = LabelMatcher.create(context)
+        }
         if (engine == null) {
-            engine = OcrEngine(context, labelMatcher)
+            engine = OcrEngine(context, labelMatcher!!)
         }
 
         val processedImage = preprocessor.preprocess(bitmap)
@@ -41,8 +44,8 @@ class OcrProcessor(private val context: Context) {
             val cleanedCode = ProductCodeValidator.cleanProductCode(text)
             val validation = ProductCodeValidator.validate(cleanedCode)
 
-            val match = labelMatcher.findBest(cleanedCode)
-            val topCandidates = labelMatcher.findTopCandidates(cleanedCode, maxResults = 3)
+            val match = labelMatcher!!.findBest(cleanedCode)
+            val topCandidates = labelMatcher!!.findTopCandidates(cleanedCode, maxResults = 3)
 
             // ラベル距離 > 3（正解ラベルに近い候補なし）は除外
             if (match == null) continue
@@ -85,7 +88,10 @@ class OcrProcessor(private val context: Context) {
      */
     suspend fun recognizeWithOverlay(bitmap: Bitmap): Pair<Bitmap, List<DomainOcrResult>> =
         withContext(Dispatchers.Default) {
-            if (engine == null) engine = OcrEngine(context, labelMatcher)
+            if (labelMatcher == null) {
+                labelMatcher = LabelMatcher.create(context)
+            }
+            if (engine == null) engine = OcrEngine(context, labelMatcher!!)
 
             val processedImage = preprocessor.preprocess(bitmap)
             val (overlayBitmap, rawResults) = engine!!.runOcrPolygonWithOverlay(processedImage)
@@ -95,8 +101,8 @@ class OcrProcessor(private val context: Context) {
                 if (text.isEmpty()) return@mapNotNull null
                 val cleanedCode   = ProductCodeValidator.cleanProductCode(text)
                 val validation    = ProductCodeValidator.validate(cleanedCode)
-                val match         = labelMatcher.findBest(cleanedCode)
-                val topCandidates = labelMatcher.findTopCandidates(cleanedCode, maxResults = 3)
+                val match         = labelMatcher!!.findBest(cleanedCode)
+                val topCandidates = labelMatcher!!.findTopCandidates(cleanedCode, maxResults = 3)
                 DomainOcrResult(
                     rawText         = text,
                     cleanedCode     = cleanedCode,

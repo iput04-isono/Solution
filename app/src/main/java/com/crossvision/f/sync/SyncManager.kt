@@ -50,11 +50,14 @@ class SyncManager(private val context: Context) {
             try {
                 repository.updateSyncStatus(item.id, SyncStatus.SYNCING)
 
+                // エンティティの userId は String なので、サーバーに合わせて Int に変換する（エラー時は 1）
+                val workerId = item.userId.toIntOrNull() ?: 1
+
                 // サーバーへ送信
                 val request = com.crossvision.f.data.model.RegistrationRequest(
-                    processId = 1, // TODO: IDの動的取得
-                    division = if (item.processName.contains("入")) "start" else "end",
-                    workerId = 1,
+                    processId = 1, // 工程IDの動的取得が複雑なため現状は1（サーバー側でprocess_nameを優先使用）
+                    division = item.processName, // "start"/"end" 固定ではなく、選択された工程名をそのまま送信
+                    workerId = workerId,
                     deviceId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID),
                     registeredAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).format(java.util.Date(item.registeredAt)),
                     productNumbers = listOf(item.productCode),
