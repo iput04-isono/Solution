@@ -124,60 +124,153 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--red);cursor:point
 .modal-body strong{color:var(--red)}
 .modal-actions{display:flex;gap:10px;justify-content:center}
 .modal-actions .btn{min-width:110px;padding:10px 20px;font-size:14px}
+.view-section { display: none; flex-direction: column; }
+.view-section.active { display: flex; }
+.master-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.master-form { display: flex; gap: 10px; align-items: center; background: var(--surface); padding: 16px; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; flex-wrap: wrap; }
+.master-form input[type="text"], .master-form input[type="number"], .master-form select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; outline: none; }
+.upload-form { display: flex; gap: 10px; align-items: center; margin-left: auto; }
 </style>
 </head>
 <body>
 
 <aside class="sidebar">
   <div class="sidebar-logo"><span class="logo-icon">🏗</span><span class="logo-text">鉄骨認識</span></div>
-  <nav class="sidebar-nav"><a href="#" class="nav-item active">📊 ダッシュボード</a></nav>
+  <nav class="sidebar-nav">
+    <a href="#" class="nav-item active" id="nav-dashboard" onclick="switchTab('dashboard')">📊 ダッシュボード</a>
+    <a href="#" class="nav-item" id="nav-products" onclick="switchTab('products')">📦 製品マスター</a>
+    <a href="#" class="nav-item" id="nav-constructions" onclick="switchTab('constructions')">🏗 工事マスター</a>
+    <a href="#" class="nav-item" id="nav-processes" onclick="switchTab('processes')">🛠 工程マスター</a>
+  </nav>
   <div class="sidebar-footer"><span id="lastUpdated" class="update-time">更新中...</span></div>
 </aside>
 
 <div class="main-wrap">
-  <header class="topbar">
-    <h1 class="page-title">ダッシュボード</h1>
-    <div class="topbar-actions">
-      <div id="selectionBar" class="selection-bar">
-        <span class="selection-count" id="selectionCount">0件選択中</span>
-        <button class="btn btn-danger-outline" onclick="clearSelection()">✕ 選択解除</button>
-        <button class="btn btn-danger" id="btnBulkDelete" onclick="confirmBulkDelete()">🗑 選択削除</button>
+  <!-- ダッシュボード画面 -->
+  <div id="view-dashboard" class="view-section active">
+    <header class="topbar">
+      <h1 class="page-title">ダッシュボード</h1>
+      <div class="topbar-actions">
+        <div id="selectionBar" class="selection-bar">
+          <span class="selection-count" id="selectionCount">0件選択中</span>
+          <button class="btn btn-danger-outline" onclick="clearSelection()">✕ 選択解除</button>
+          <button class="btn btn-danger" id="btnBulkDelete" onclick="confirmBulkDelete()">🗑 選択削除</button>
+        </div>
+        <button class="btn btn-outline" onclick="fetchData()">🔄 更新</button>
+        <button class="btn btn-primary" onclick="exportCsv()">⬇ CSV出力</button>
       </div>
-      <button class="btn btn-outline" onclick="fetchData()">🔄 更新</button>
-      <button class="btn btn-primary" onclick="exportCsv()">⬇ CSV出力</button>
-    </div>
-  </header>
+    </header>
+    <main class="content">
+      <section class="cards">
+        <div class="card card-blue">  <div class="card-icon">📦</div><div class="card-body"><div class="card-label">総登録件数</div><div class="card-value" id="cTotal">—</div></div></div>
+      </section>
+      <section class="filter-bar">
+        <div class="filter-group"><label class="filter-label">日付</label><input type="date" id="filterDate" class="filter-input"/></div>
+        <div class="filter-group filter-search"><label class="filter-label">工事名</label><input type="text" id="filterConst" class="filter-input" placeholder="工事名で絞り込み..."/></div>
+        <div class="filter-group filter-search"><label class="filter-label">工程名</label><input type="text" id="filterProc" class="filter-input" placeholder="工程名で絞り込み..."/></div>
+        <div class="filter-group filter-search"><label class="filter-label">製品番号</label><input type="text" id="filterSearch" class="filter-input" placeholder="キーワード検索..."/></div>
+        <button class="btn btn-ghost" onclick="clearFilters()">✕ クリア</button>
+        <div class="filter-count" id="countInfo"></div>
+      </section>
+      <section class="table-section">
+        <table>
+          <thead><tr>
+            <th style="width:40px;text-align:center"><input type="checkbox" id="checkAll" title="すべて選択" onchange="toggleAll(this.checked)"/></th>
+            <th class="sortable" data-key="id">ID</th>
+            <th class="sortable" data-key="construction_name">工事名</th>
+            <th class="sortable" data-key="process_name">工程名</th>
+            <th>製品番号</th>
+            <th class="sortable" data-key="received_at">受信日時</th>
+            <th class="sortable" data-key="device_id">デバイスID</th>
+            <th style="width:60px;text-align:center">削除</th>
+          </tr></thead>
+          <tbody id="tableBody"><tr><td colspan="7" class="empty-row">読み込み中...</td></tr></tbody>
+        </table>
+      </section>
+    </main>
+  </div>
 
-  <main class="content">
-    <section class="cards">
-      <div class="card card-blue">  <div class="card-icon">📦</div><div class="card-body"><div class="card-label">総登録件数</div><div class="card-value" id="cTotal">—</div></div></div>
-    </section>
+  <!-- 製品マスター画面 -->
+  <div id="view-products" class="view-section">
+    <header class="topbar">
+      <h1 class="page-title">製品マスター管理</h1>
+      <div class="topbar-actions">
+        <button class="btn btn-outline" onclick="fetchProducts()">🔄 更新</button>
+      </div>
+    </header>
+    <main class="content">
+      <div class="master-form">
+        <input type="text" id="newProductCode" placeholder="製品番号を入力 (例: H150X150X7)" style="width:250px" />
+        <button class="btn btn-primary" onclick="addProduct()">＋ 登録</button>
+        <div class="upload-form">
+          <input type="file" id="uploadProductCsv" accept=".csv" />
+          <button class="btn btn-outline" onclick="uploadCsv('product-labels', 'uploadProductCsv', fetchProducts)">CSVインポート (洗い替え)</button>
+          <button class="btn btn-outline" onclick="exportProductLabelsCsv()">⬇ CSV出力</button>
+        </div>
+      </div>
+      <section class="table-section">
+        <table>
+          <thead><tr><th>製品番号</th><th style="width:60px;text-align:center">削除</th></tr></thead>
+          <tbody id="tableProductsBody"></tbody>
+        </table>
+      </section>
+    </main>
+  </div>
 
-    <section class="filter-bar">
-      <div class="filter-group"><label class="filter-label">日付</label><input type="date" id="filterDate" class="filter-input"/></div>
-      <div class="filter-group filter-search"><label class="filter-label">工事名</label><input type="text" id="filterConst" class="filter-input" placeholder="工事名で絞り込み..."/></div>
-      <div class="filter-group filter-search"><label class="filter-label">工程名</label><input type="text" id="filterProc" class="filter-input" placeholder="工程名で絞り込み..."/></div>
-      <div class="filter-group filter-search"><label class="filter-label">製品番号</label><input type="text" id="filterSearch" class="filter-input" placeholder="キーワード検索..."/></div>
-      <button class="btn btn-ghost" onclick="clearFilters()">✕ クリア</button>
-      <div class="filter-count" id="countInfo"></div>
-    </section>
+  <!-- 工事マスター画面 -->
+  <div id="view-constructions" class="view-section">
+    <header class="topbar">
+      <h1 class="page-title">工事マスター管理</h1>
+      <div class="topbar-actions">
+        <button class="btn btn-outline" onclick="fetchConstructions()">🔄 更新</button>
+      </div>
+    </header>
+    <main class="content">
+      <div class="master-form">
+        <input type="text" id="newConstName" placeholder="工事名 (例: A棟建設)" />
+        <input type="text" id="newConstCode" placeholder="コード (例: C001)" />
+        <button class="btn btn-primary" onclick="addConstruction()">＋ 登録</button>
+        <div class="upload-form">
+          <input type="file" id="uploadConstCsv" accept=".csv" />
+          <button class="btn btn-outline" onclick="uploadCsv('constructions', 'uploadConstCsv', fetchConstructions)">CSVインポート (洗い替え)</button>
+        </div>
+      </div>
+      <section class="table-section">
+        <table>
+          <thead><tr><th>ID</th><th>工事名</th><th>コード</th><th style="width:60px;text-align:center">削除</th></tr></thead>
+          <tbody id="tableConstBody"></tbody>
+        </table>
+      </section>
+    </main>
+  </div>
 
-    <section class="table-section">
-      <table>
-        <thead><tr>
-          <th style="width:40px;text-align:center"><input type="checkbox" id="checkAll" title="すべて選択" onchange="toggleAll(this.checked)"/></th>
-          <th class="sortable" data-key="id">ID</th>
-          <th class="sortable" data-key="construction_name">工事名</th>
-          <th class="sortable" data-key="process_name">工程名</th>
-          <th>製品番号</th>
-          <th class="sortable" data-key="received_at">受信日時</th>
-          <th class="sortable" data-key="device_id">デバイスID</th>
-          <th style="width:60px;text-align:center">削除</th>
-        </tr></thead>
-        <tbody id="tableBody"><tr><td colspan="7" class="empty-row">読み込み中...</td></tr></tbody>
-      </table>
-    </section>
-  </main>
+  <!-- 工程マスター画面 -->
+  <div id="view-processes" class="view-section">
+    <header class="topbar">
+      <h1 class="page-title">工程マスター管理</h1>
+      <div class="topbar-actions">
+        <button class="btn btn-outline" onclick="fetchProcesses()">🔄 更新</button>
+      </div>
+    </header>
+    <main class="content">
+      <div class="master-form">
+        <input type="number" id="newProcCid" placeholder="工事ID (例: 1)" style="width:120px" />
+        <input type="text" id="newProcName" placeholder="工程名 (例: 入庫)" />
+        <input type="text" id="newProcCode" placeholder="コード (例: P001)" />
+        <button class="btn btn-primary" onclick="addProcess()">＋ 登録</button>
+        <div class="upload-form">
+          <input type="file" id="uploadProcCsv" accept=".csv" />
+          <button class="btn btn-outline" onclick="uploadCsv('processes', 'uploadProcCsv', fetchProcesses)">CSVインポート (洗い替え)</button>
+        </div>
+      </div>
+      <section class="table-section">
+        <table>
+          <thead><tr><th>ID</th><th>工事ID</th><th>工程名</th><th>コード</th><th style="width:60px;text-align:center">削除</th></tr></thead>
+          <tbody id="tableProcBody"></tbody>
+        </table>
+      </section>
+    </main>
+  </div>
 </div>
 
 <!-- 削除確認モーダル -->
@@ -395,6 +488,135 @@ async function execDelete(){
 // ── CSV出力 ────────────────────────────────────────────
 function exportCsv(){ window.location.href='/api/export/csv'; }
 
+// ── タブ切り替え ──────────────────────────────────────
+function switchTab(tabId){
+  document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById(`view-${tabId}`).classList.add('active');
+  document.getElementById(`nav-${tabId}`).classList.add('active');
+  
+  if(tabId === 'dashboard') fetchData();
+  if(tabId === 'products') fetchProducts();
+  if(tabId === 'constructions') fetchConstructions();
+  if(tabId === 'processes') fetchProcesses();
+}
+
+// ── マスターデータ管理 ────────────────────────────────────
+
+// CSVアップロード共通関数
+async function uploadCsv(resource, inputId, refreshFn) {
+  const fileInput = document.getElementById(inputId);
+  if(!fileInput.files.length) { alert('ファイルを選択してください'); return; }
+  
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  
+  try {
+    const res = await fetch(`/api/${resource}/import`, {
+      method: 'POST',
+      headers: { 'X-API-KEY': API_KEY },
+      body: formData
+    });
+    if(!res.ok) throw new Error('Failed to upload');
+    const data = await res.json();
+    alert(`${data.count} 件のデータをインポートしました！`);
+    fileInput.value = '';
+    refreshFn();
+  } catch(e) {
+    alert('インポートエラー: ' + e.message);
+  }
+}
+
+// 製品マスター
+async function fetchProducts(){
+  const res = await fetch('/api/product-labels');
+  const codes = await res.json();
+  const tbody = document.getElementById('tableProductsBody');
+  tbody.innerHTML = codes.map(c => `<tr>
+    <td><span class="badge">${c}</span></td>
+    <td style="text-align:center"><button class="btn-row-del" onclick="deleteProduct('${c}')">🗑</button></td>
+  </tr>`).join('');
+}
+async function addProduct(){
+  const code = document.getElementById('newProductCode').value.trim();
+  if(!code) return;
+  await fetch('/api/product-labels', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-KEY': API_KEY },
+    body: JSON.stringify({ code })
+  });
+  document.getElementById('newProductCode').value = '';
+  fetchProducts();
+}
+async function deleteProduct(code){
+  if(!confirm(`製品番号 ${code} を削除しますか？`)) return;
+  await fetch(`/api/product-labels/${code}`, { method: 'DELETE', headers: { 'X-API-KEY': API_KEY } });
+  fetchProducts();
+}
+function exportProductLabelsCsv() {
+  window.location.href = '/api/export/product-labels/csv';
+}
+
+// 工事マスター
+async function fetchConstructions(){
+  const res = await fetch('/api/constructions');
+  const data = await res.json();
+  const tbody = document.getElementById('tableConstBody');
+  tbody.innerHTML = data.map(d => `<tr>
+    <td>${d.id}</td><td>${d.name}</td><td>${d.code}</td>
+    <td style="text-align:center"><button class="btn-row-del" onclick="deleteConstruction(${d.id})">🗑</button></td>
+  </tr>`).join('');
+}
+async function addConstruction(){
+  const name = document.getElementById('newConstName').value.trim();
+  const code = document.getElementById('newConstCode').value.trim();
+  if(!name) return;
+  await fetch('/api/constructions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-KEY': API_KEY },
+    body: JSON.stringify({ name, code, isActive: true })
+  });
+  document.getElementById('newConstName').value = '';
+  document.getElementById('newConstCode').value = '';
+  fetchConstructions();
+}
+async function deleteConstruction(id){
+  if(!confirm(`工事ID ${id} を削除しますか？`)) return;
+  await fetch(`/api/constructions/${id}`, { method: 'DELETE', headers: { 'X-API-KEY': API_KEY } });
+  fetchConstructions();
+}
+
+// 工程マスター
+async function fetchProcesses(){
+  const res = await fetch('/api/processes');
+  const data = await res.json();
+  const tbody = document.getElementById('tableProcBody');
+  tbody.innerHTML = data.map(d => `<tr>
+    <td>${d.id}</td><td>${d.constructionId}</td><td>${d.name}</td><td>${d.code}</td>
+    <td style="text-align:center"><button class="btn-row-del" onclick="deleteProcess(${d.id})">🗑</button></td>
+  </tr>`).join('');
+}
+async function addProcess(){
+  const cid = document.getElementById('newProcCid').value;
+  const name = document.getElementById('newProcName').value.trim();
+  const code = document.getElementById('newProcCode').value.trim();
+  if(!cid || !name) return;
+  await fetch('/api/processes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-KEY': API_KEY },
+    body: JSON.stringify({ constructionId: parseInt(cid), name, code, isActive: true })
+  });
+  document.getElementById('newProcCid').value = '';
+  document.getElementById('newProcName').value = '';
+  document.getElementById('newProcCode').value = '';
+  fetchProcesses();
+}
+async function deleteProcess(id){
+  if(!confirm(`工程ID ${id} を削除しますか？`)) return;
+  await fetch(`/api/processes/${id}`, { method: 'DELETE', headers: { 'X-API-KEY': API_KEY } });
+  fetchProcesses();
+}
+
 // ── イベント登録 ────────────────────────────────────────
 document.querySelectorAll('th.sortable').forEach(th=>th.addEventListener('click',()=>handleSort(th.dataset.key)));
 ['filterDate','filterConst','filterProc','filterSearch'].forEach(id=>document.getElementById(id).addEventListener('input',updateTable));
@@ -403,7 +625,12 @@ document.querySelectorAll('th.sortable').forEach(th=>th.addEventListener('click'
 document.getElementById('modalOverlay').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeModal(); });
 
 fetchData();
-setInterval(fetchData, 10000);
+setInterval(()=>{
+  // ダッシュボードがアクティブな時だけ自動更新
+  if(document.getElementById('view-dashboard').classList.contains('active')){
+    fetchData();
+  }
+}, 10000);
 </script>
 </body>
 </html>

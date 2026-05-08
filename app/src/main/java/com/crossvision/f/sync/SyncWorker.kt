@@ -77,6 +77,9 @@ class SyncWorker(
                 Log.i(TAG, "製品コード同期完了: ${labelCount}件を更新しました")
             }
 
+            // 3. 工事・工程マスターをサーバーから取得して DB を更新
+            syncManager.syncConstructionsAndProcesses()
+
             Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "同期エラー: ${e.message}", e)

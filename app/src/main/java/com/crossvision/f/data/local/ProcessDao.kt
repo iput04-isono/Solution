@@ -21,4 +21,7 @@ interface ProcessDao {
 
     @Delete
     suspend fun delete(process: Process)
+
+    @Query("DELETE FROM processes")
+    suspend fun deleteAll()
 }

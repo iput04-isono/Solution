@@ -42,6 +42,16 @@ class AppRepository(context: Context) {
         return processDao.getByConstructionIdSync(constructionId)
     }
 
+    suspend fun replaceConstructions(constructions: List<Construction>) {
+        constructionDao.deleteAll()
+        constructionDao.insertAll(constructions)
+    }
+
+    suspend fun replaceProcesses(processes: List<Process>) {
+        processDao.deleteAll()
+        processDao.insertAll(processes)
+    }
+
     // ===== 登録 =====
 
     fun getAllRegistrations(): LiveData<List<Registration>> {

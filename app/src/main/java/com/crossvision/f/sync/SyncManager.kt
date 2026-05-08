@@ -108,14 +108,16 @@ class SyncManager(private val context: Context) {
         }
 
         return try {
-            // TODO: 実際の API エンドポイントに置き換える
-            // val response = apiService.getProductLabels()
-            // val codes = response.body() ?: return 0
-            val codes = simulateFetchProductLabels()
-
-            repository.replaceProductLabels(codes)
-            Log.i(TAG, "製品コード同期完了: ${codes.size}件")
-            codes.size
+            val response = com.crossvision.f.data.api.RetrofitClient.apiService.getProductLabels()
+            if (response.isSuccessful) {
+                val codes = response.body() ?: return 0
+                repository.replaceProductLabels(codes)
+                Log.i(TAG, "製品コード同期完了: ${codes.size}件")
+                codes.size
+            } else {
+                Log.e(TAG, "製品コード同期失敗: HTTP ${response.code()}")
+                0
+            }
         } catch (e: Exception) {
             Log.e(TAG, "製品コード同期エラー: ${e.message}", e)
             0
@@ -123,38 +125,42 @@ class SyncManager(private val context: Context) {
     }
 
     /**
-     * API呼び出しのシミュレーション（登録データ同期用モック）
-     * 実運用時にはRetrofit等による実際のAPI通信に置き換え
+     * 工事と工程のマスターデータをサーバーから取得して DB を更新する。
      */
-    private suspend fun simulateApiCall(): Boolean {
-        kotlinx.coroutines.delay(500)
-        return true
-    }
-
-    /**
-     * 製品コード取得 API のモック実装。
-     * 実運用時は以下のように Retrofit に置き換える:
-     *
-     *   interface ApiService {
-     *       @GET("api/product-labels")
-     *       suspend fun getProductLabels(): Response<List<String>>
-     *   }
-     *
-     * モックは assets の product_labels.txt を読み返すことで
-     * 実際の API と同じ動作をシミュレートする。
-     */
-    private suspend fun simulateFetchProductLabels(): List<String> {
-        kotlinx.coroutines.delay(300)
+    suspend fun syncConstructionsAndProcesses(): Boolean {
+        if (!isNetworkAvailable()) {
+            Log.d(TAG, "工事・工程同期スキップ: ネットワーク未接続")
+            return false
+        }
+        
         return try {
-            context.assets.open("product_labels.txt")
-                .bufferedReader(Charsets.UTF_8)
-                .readLines()
-                .map { it.trim() }
-                .filter { it.isNotEmpty() && it.all { c -> c.code < 128 } }
-                .distinct()
+            val api = com.crossvision.f.data.api.RetrofitClient.apiService
+            
+            // 工事データの同期
+            val constResponse = api.getConstructions()
+            if (constResponse.isSuccessful) {
+                val constructions = constResponse.body() ?: emptyList()
+                repository.replaceConstructions(constructions)
+            } else {
+                Log.e(TAG, "工事同期失敗: HTTP ${constResponse.code()}")
+                return false
+            }
+
+            // 工程データの同期
+            val procResponse = api.getProcesses()
+            if (procResponse.isSuccessful) {
+                val processes = procResponse.body() ?: emptyList()
+                repository.replaceProcesses(processes)
+            } else {
+                Log.e(TAG, "工程同期失敗: HTTP ${procResponse.code()}")
+                return false
+            }
+
+            Log.i(TAG, "工事・工程同期完了")
+            true
         } catch (e: Exception) {
-            Log.e(TAG, "モック製品コード読み込み失敗", e)
-            emptyList()
+            Log.e(TAG, "工事・工程同期エラー: ${e.message}", e)
+            false
         }
     }
 }

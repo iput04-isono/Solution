@@ -21,4 +21,7 @@ interface ConstructionDao {
 
     @Delete
     suspend fun delete(construction: Construction)
+
+    @Query("DELETE FROM constructions")
+    suspend fun deleteAll()
 }

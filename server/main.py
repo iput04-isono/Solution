@@ -3,13 +3,13 @@
 起動方法: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 """
 
-from fastapi import FastAPI, Response, Security, HTTPException, Depends
+from fastapi import FastAPI, Response, Security, HTTPException, Depends, UploadFile, File
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
-import json, os, csv, io, socket, starlette.status
+import json, os, csv, io, socket, starlette.status, unicodedata
 from zeroconf import IPVersion, ServiceInfo, Zeroconf
 
 app = FastAPI(title="鉄骨認識サーバー（開発用）")
@@ -17,6 +17,20 @@ app = FastAPI(title="鉄骨認識サーバー（開発用）")
 BASE_DIR = os.path.dirname(__file__)
 
 # ── モデル ──────────────────────────────────────────────
+
+class ProductLabelRequest(BaseModel):
+    code: str
+
+class ConstructionRequest(BaseModel):
+    name: str
+    code: str
+    isActive: bool = True
+
+class ProcessRequest(BaseModel):
+    constructionId: int
+    name: str
+    code: str
+    isActive: bool = True
 
 class RegistrationRequest(BaseModel):
     process_id: int
@@ -52,6 +66,9 @@ async def get_api_key(header_key: str = Depends(api_key_header)):
 # ── データ保存 ──────────────────────────────────────────
 
 DATA_FILE = os.path.join(BASE_DIR, "registrations.json")
+PRODUCT_LABELS_FILE = os.path.join(BASE_DIR, "product_labels.json")
+CONSTRUCTIONS_FILE = os.path.join(BASE_DIR, "constructions.json")
+PROCESSES_FILE = os.path.join(BASE_DIR, "processes.json")
 
 def load_data() -> list:
     if not os.path.exists(DATA_FILE):
@@ -62,6 +79,29 @@ def load_data() -> list:
 def save_data(data: list):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+def load_json_list(file_path: str, default_val=None) -> list:
+    if default_val is None:
+        default_val = []
+    if not os.path.exists(file_path):
+        return default_val
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return default_val
+
+def save_json_list(file_path: str, data: list):
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def normalize_product_code(code: str) -> str:
+    """製品コードを半角大文字に正規化し、許可されたASCII文字以外を除外する"""
+    # NFKC正規化で全角英数字を半角に
+    normalized = unicodedata.normalize('NFKC', code).upper().strip()
+    # 許可されたASCII文字(0x20〜0x7E)のみを残す
+    filtered = "".join(c for c in normalized if 0x20 <= ord(c) <= 0x7E)
+    return filtered
 
 # ── API ─────────────────────────────────────────────────
 
@@ -88,6 +128,141 @@ def post_registration(req: RegistrationRequest, api_key: str = Depends(get_api_k
 @app.get("/api/registrations")
 def get_registrations():
     return load_data()
+
+@app.get("/api/product-labels")
+def get_product_labels():
+    # 万が一ファイルがない場合の初期ダミーデータ
+    default_labels = ["H150X150X7", "B1Sb30N-7A", "C200X200X8"]
+    return load_json_list(PRODUCT_LABELS_FILE, default_labels)
+
+@app.post("/api/product-labels")
+def add_product_label(req: ProductLabelRequest, api_key: str = Depends(get_api_key)):
+    labels = load_json_list(PRODUCT_LABELS_FILE, [])
+    code = normalize_product_code(req.code)
+    if not code:
+        raise HTTPException(status_code=400, detail="有効な文字が含まれていません")
+    if code not in labels:
+        labels.append(code)
+        save_json_list(PRODUCT_LABELS_FILE, labels)
+    return {"success": True, "code": code}
+
+@app.delete("/api/product-labels/{code}")
+def delete_product_label(code: str, api_key: str = Depends(get_api_key)):
+    labels = load_json_list(PRODUCT_LABELS_FILE, [])
+    labels = [l for l in labels if l != code]
+    save_json_list(PRODUCT_LABELS_FILE, labels)
+    return {"success": True}
+
+@app.post("/api/product-labels/import")
+def import_product_labels(file: UploadFile = File(...), api_key: str = Depends(get_api_key)):
+    content = file.file.read().decode("utf-8-sig") # BOM付きにも対応
+    labels = []
+    reader = csv.reader(io.StringIO(content))
+    # ヘッダーがあるかもしれないが、1列目だけ取れればOKとする
+    for row in reader:
+        if row and row[0].strip():
+            raw_code = row[0].strip()
+            # ヘッダー文字列っぽければスキップ
+            if raw_code == "製品番号" or raw_code.lower() == "code":
+                continue
+            cleaned = normalize_product_code(raw_code)
+            if cleaned:
+                labels.append(cleaned)
+    # 洗い替え
+    unique_labels = list(set(labels))
+    save_json_list(PRODUCT_LABELS_FILE, unique_labels)
+    return {"success": True, "count": len(unique_labels)}
+
+@app.get("/api/export/product-labels/csv")
+def export_product_labels_csv():
+    labels = load_json_list(PRODUCT_LABELS_FILE, [])
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["製品番号"])
+    for label in labels:
+        writer.writerow([label])
+    csv_bytes = ("\ufeff" + output.getvalue()).encode("utf-8")
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=product_labels.csv"}
+    )
+
+@app.get("/api/constructions")
+def get_constructions():
+    default_constructions = [
+        {"id": 1, "name": "A棟新築工事", "code": "C001", "isActive": True},
+        {"id": 2, "name": "B棟改修工事", "code": "C002", "isActive": True}
+    ]
+    return load_json_list(CONSTRUCTIONS_FILE, default_constructions)
+
+@app.post("/api/constructions")
+def add_construction(req: ConstructionRequest, api_key: str = Depends(get_api_key)):
+    data = load_json_list(CONSTRUCTIONS_FILE, [])
+    new_id = max([d.get("id", 0) for d in data], default=0) + 1
+    data.append({"id": new_id, "name": req.name, "code": req.code, "isActive": req.isActive})
+    save_json_list(CONSTRUCTIONS_FILE, data)
+    return {"success": True}
+
+@app.delete("/api/constructions/{cid}")
+def delete_construction(cid: int, api_key: str = Depends(get_api_key)):
+    data = load_json_list(CONSTRUCTIONS_FILE, [])
+    data = [d for d in data if d.get("id") != cid]
+    save_json_list(CONSTRUCTIONS_FILE, data)
+    return {"success": True}
+
+@app.post("/api/constructions/import")
+def import_constructions(file: UploadFile = File(...), api_key: str = Depends(get_api_key)):
+    content = file.file.read().decode("utf-8-sig")
+    data = []
+    reader = csv.reader(io.StringIO(content))
+    header = next(reader, None)
+    for i, row in enumerate(reader, start=1):
+        if len(row) >= 2:
+            data.append({"id": i, "name": row[0].strip(), "code": row[1].strip(), "isActive": True})
+    save_json_list(CONSTRUCTIONS_FILE, data)
+    return {"success": True, "count": len(data)}
+
+@app.get("/api/processes")
+def get_processes():
+    default_processes = [
+        {"id": 1, "constructionId": 1, "name": "入庫", "code": "P001", "isActive": True},
+        {"id": 2, "constructionId": 1, "name": "出庫", "code": "P002", "isActive": True},
+        {"id": 3, "constructionId": 2, "name": "入庫", "code": "P003", "isActive": True},
+        {"id": 4, "constructionId": 2, "name": "出庫", "code": "P004", "isActive": True}
+    ]
+    return load_json_list(PROCESSES_FILE, default_processes)
+
+@app.post("/api/processes")
+def add_process(req: ProcessRequest, api_key: str = Depends(get_api_key)):
+    data = load_json_list(PROCESSES_FILE, [])
+    new_id = max([d.get("id", 0) for d in data], default=0) + 1
+    data.append({"id": new_id, "constructionId": req.constructionId, "name": req.name, "code": req.code, "isActive": req.isActive})
+    save_json_list(PROCESSES_FILE, data)
+    return {"success": True}
+
+@app.delete("/api/processes/{pid}")
+def delete_process(pid: int, api_key: str = Depends(get_api_key)):
+    data = load_json_list(PROCESSES_FILE, [])
+    data = [d for d in data if d.get("id") != pid]
+    save_json_list(PROCESSES_FILE, data)
+    return {"success": True}
+
+@app.post("/api/processes/import")
+def import_processes(file: UploadFile = File(...), api_key: str = Depends(get_api_key)):
+    content = file.file.read().decode("utf-8-sig")
+    data = []
+    reader = csv.reader(io.StringIO(content))
+    header = next(reader, None)
+    for i, row in enumerate(reader, start=1):
+        if len(row) >= 3:
+            try:
+                cid = int(row[0].strip())
+            except:
+                cid = 1
+            data.append({"id": i, "constructionId": cid, "name": row[1].strip(), "code": row[2].strip(), "isActive": True})
+    save_json_list(PROCESSES_FILE, data)
+    return {"success": True, "count": len(data)}
 
 @app.delete("/api/registrations/{entry_id}", response_model=RegistrationResponse)
 def delete_registration(entry_id: int, api_key: str = Depends(get_api_key)):
