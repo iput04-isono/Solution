@@ -2,6 +2,7 @@ package com.crossvision.f.ui.camera
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -158,13 +159,18 @@ class CameraActivity : AppCompatActivity() {
 
         isAnalyzing = true
 
-        // toBitmap() は imageProxy がオープンな状態で呼ぶ必要がある。
-        // 変換後すぐ close() して CameraX にバッファを返す。
+        // ImageAnalysis フレームはカメラセンサー向き（ランドスケープ）のまま届く。
+        // 画面表示と合わせるため、rotationDegrees 分だけ回転補正する。
+        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
         val bitmap: Bitmap
         try {
-            bitmap = imageProxy.toBitmap()
+            val raw = imageProxy.toBitmap()
+            bitmap = if (rotationDegrees != 0) {
+                val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+                Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
+            } else raw
         } finally {
-            imageProxy.close()
+            imageProxy.close()   // 変換後すぐ解放して CameraX にバッファを返す
         }
 
         analysisScope.launch {
@@ -237,9 +243,18 @@ class CameraActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        analysisScope.cancel()
         cameraExecutor.shutdown()
-        ocrEngine?.close()
+
+        // ocrEngine を null にしてから scope をキャンセルする。
+        // ONNX 推論はネイティブコードのため CancellationException では止まらない。
+        // 即座に close() するとネイティブコードが解放済みセッションにアクセスし
+        // SIGSEGV が発生するため、500ms の猶予を設けてから close() する。
+        val engineToClose = ocrEngine
         ocrEngine = null
+        analysisScope.cancel()
+        Thread {
+            Thread.sleep(500)
+            engineToClose?.close()
+        }.also { it.isDaemon = true }.start()
     }
 }
