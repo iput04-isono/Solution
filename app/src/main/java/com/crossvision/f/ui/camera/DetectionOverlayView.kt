@@ -94,12 +94,13 @@ class DetectionOverlayView @JvmOverloads constructor(
         val viewH = height.toFloat()
         if (viewW == 0f || viewH == 0f) return
 
-        // PreviewView は FILL_CENTER スケールのため、
-        // 画像アスペクト比を保ちながら View いっぱいに表示される。
-        // 縮小後の画像サイズとオフセット（レターボックス）を計算する。
+        // PreviewView のデフォルトスケールタイプは FILL_CENTER（CENTER_CROP相当）。
+        // 画像がビュー全体を埋めるように拡大し、はみ出た部分はクロップされる。
+        // → scale = max(viewW/imgW, viewH/imgH) を使う必要がある
+        //   （min では黒帯を想定した計算になり枠位置がズレる）
         val scaleX = viewW / imageWidth
         val scaleY = viewH / imageHeight
-        val scale  = minOf(scaleX, scaleY)
+        val scale  = maxOf(scaleX, scaleY)
 
         val scaledW = imageWidth  * scale
         val scaledH = imageHeight * scale

@@ -56,7 +56,7 @@ class CameraActivity : AppCompatActivity() {
         private const val FILENAME_FORMAT = "yyyyMMdd_HHmmss"
 
         /** ライブ検出の最小間隔（ms）。前回の解析完了からこの時間以上空けてから次を実行。 */
-        private const val ANALYSIS_INTERVAL_MS = 800L
+        private const val ANALYSIS_INTERVAL_MS = 500L
     }
 
     /** 最後に解析を完了した時刻（スロットリング用） */
@@ -73,6 +73,8 @@ class CameraActivity : AppCompatActivity() {
         // OcrEngineをバックグラウンドで初期化（起動時のUIブロックを防ぐ）
         analysisScope.launch {
             ocrEngine = OcrEngine(this@CameraActivity)
+            // 初期化完了直後のフレームを即座に解析できるようタイマーをリセット
+            lastAnalysisTimeMs = 0L
             Log.d(TAG, "OcrEngine 初期化完了（ライブ検出用）")
         }
 
