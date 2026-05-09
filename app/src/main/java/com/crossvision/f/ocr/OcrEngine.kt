@@ -90,6 +90,10 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
     private var recSession: OrtSession? = null
     private val labelList = mutableListOf<String>()
 
+    // 排他制御用
+    private val lock = Any()
+    private var isClosed = false
+
     // 多角形検出モードで正向き・逆向きを並列推論するスレッドプール
     private val recPool = Executors.newFixedThreadPool(2)
 
@@ -241,10 +245,14 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
 
     /** リソースを解放する。使い終わったら必ず呼ぶ。 */
     fun close() {
-        recPool.shutdown()
-        detSession?.close()
-        recSession?.close()
-        env.close()
+        synchronized(lock) {
+            if (isClosed) return
+            isClosed = true
+            recPool.shutdownNow()
+            detSession?.close()
+            recSession?.close()
+            env.close()
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -398,8 +406,12 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
         val inputName   = session.inputNames.iterator().next()
         val inputTensor = OnnxTensor.createTensor(env, imgData,
             longArrayOf(1, 3, DET_SIZE.toLong(), DET_SIZE.toLong()))
-        return session.run(Collections.singletonMap(inputName, inputTensor)).use { output ->
-            extract2DArray(output[0].value)
+
+        synchronized(lock) {
+            if (isClosed) return null
+            return session.run(Collections.singletonMap(inputName, inputTensor)).use { output ->
+                extract2DArray(output[0].value)
+            }
         }
     }
 
@@ -445,29 +457,39 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
 
     /**
      * ライブビューファインダー用: 検出のみを行い、認識は実行しない。
-     *
-     * CameraActivity の ImageAnalysis アナライザーから呼ぶ。
-     * 返すポリゴンは元画像（bitmap）座標系の FloatArray(8)。
-     * UI側で PreviewView 座標系に変換してから描画すること。
-     *
-     * @param bitmap 前処理済み画像（ImagePreprocessor.preprocess() の出力）
-     * @return 検出多角形のリスト（各要素: [x0,y0, x1,y1, x2,y2, x3,y3]）
+     * ノイズ枠を減らすため、通常の多角形検出よりも閾値を厳しく設定する。
      */
-    fun detectTextPolygonOnly(bitmap: Bitmap): List<FloatArray> = detectTextPolygon(bitmap)
+    fun detectTextPolygonOnly(bitmap: Bitmap): List<FloatArray> {
+        return detectTextPolygonInternal(
+            bitmap,
+            threshold = 0.45f,  // 高めのヒートマップ閾値
+            minPx = 50,         // より大きい連結成分のみ
+            minArea = 400f      // より広い面積のみ
+        )
+    }
 
-    /** 多角形検出: BFS連結成分 → PCA最小外接矩形 → アンクリップ → 面積フィルタ */
+    /** 多角形検出（静止画用の標準パラメータ） */
     private fun detectTextPolygon(bitmap: Bitmap): List<FloatArray> {
+        return detectTextPolygonInternal(bitmap, DET_THRESHOLD, BFS_MIN_PX, MIN_POLY_AREA)
+    }
+
+    private fun detectTextPolygonInternal(
+        bitmap: Bitmap,
+        threshold: Float,
+        minPx: Int,
+        minArea: Float
+    ): List<FloatArray> {
         val heatMap = runDetectionModel(bitmap) ?: return emptyList()
         val scaleX  = bitmap.width.toFloat()  / DET_SIZE
         val scaleY  = bitmap.height.toFloat() / DET_SIZE
 
-        return bfsComponents(heatMap, threshold = DET_THRESHOLD, minPx = BFS_MIN_PX)
+        return bfsComponents(heatMap, threshold = threshold, minPx = minPx)
             .mapNotNull { comp ->
                 val rr = pcaMinRect(comp) ?: return@mapNotNull null
                 val corners = unclipRect(rr, ratio = UNCLIP_RATIO)
                 FloatArray(8) { i -> if (i % 2 == 0) corners[i] * scaleX else corners[i] * scaleY }
             }
-            .filter { polygonArea(it) > MIN_POLY_AREA }
+            .filter { polygonArea(it) > minArea }
             .sortedByDescending { polygonArea(it) }
             .take(MAX_REGIONS)
     }
@@ -615,9 +637,13 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
         val inputName   = session.inputNames.iterator().next()
         val inputTensor = OnnxTensor.createTensor(env, imgData,
             longArrayOf(1, 3, targetH.toLong(), targetW.toLong()))
-        return session.run(Collections.singletonMap(inputName, inputTensor)).use { results ->
-            val output = extract2DArray(results[0].value) ?: return OcrResult("", 0f)
-            decode(output)
+
+        synchronized(lock) {
+            if (isClosed) return OcrResult("", 0f)
+            return session.run(Collections.singletonMap(inputName, inputTensor)).use { results ->
+                val output = extract2DArray(results[0].value) ?: return@use OcrResult("", 0f)
+                decode(output)
+            }
         }
     }
 

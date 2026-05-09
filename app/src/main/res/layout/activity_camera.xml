@@ -19,6 +19,13 @@
         android:layout_height="match_parent"
         android:background="@android:color/transparent" />
 
+    <!-- ピント合わせ時の枠（初期非表示） -->
+    <View
+        android:id="@+id/focusIndicator"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:background="@drawable/bg_focus_indicator"
+        android:visibility="invisible" />
 
     <!-- 上部ツールバー -->
     <LinearLayout
@@ -47,9 +54,14 @@
             android:textSize="@dimen/text_subtitle"
             android:textAlignment="center" />
 
-        <View
+        <ImageButton
+            android:id="@+id/btnFlash"
             android:layout_width="48dp"
-            android:layout_height="48dp" />
+            android:layout_height="48dp"
+            android:src="@drawable/ic_flash_auto"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="フラッシュ"
+            app:tint="@color/on_primary" />
 
     </LinearLayout>
 
@@ -63,11 +75,38 @@
         android:padding="@dimen/spacing_lg"
         android:background="@color/camera_overlay">
 
+        <!-- 明るさ調整 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="@dimen/spacing_md"
+            android:paddingHorizontal="32dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="明るさ"
+                android:textColor="#B3FFFFFF"
+                android:textSize="12sp"
+                android:layout_marginEnd="8dp"/>
+
+            <SeekBar
+                android:id="@+id/seekExposure"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:progressTint="#FFFFFF"
+                android:thumbTint="#FFFFFF" />
+        </LinearLayout>
+
         <!-- 撮影ガイドテキスト -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="鉄骨の製品番号が見えるように撮影してください"
+            android:text="鉄骨の製品番号が見えるように撮影してください\nピンチでズーム、タップでピント調整"
+            android:textAlignment="center"
             android:textColor="#B3FFFFFF"
             android:textSize="@dimen/text_caption"
             android:layout_marginBottom="@dimen/spacing_md" />

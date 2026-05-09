@@ -1,15 +1,20 @@
 package com.crossvision.f.ui.camera
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.os.Bundle
 import android.util.Log
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
+import android.widget.SeekBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
+import com.crossvision.f.R
 import com.crossvision.f.databinding.ActivityCameraBinding
 import com.crossvision.f.ocr.ImagePreprocessor
 import com.crossvision.f.ocr.OcrEngine
@@ -19,6 +24,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * カメラ画面
@@ -36,6 +42,11 @@ class CameraActivity : AppCompatActivity() {
     private var imageCapture: ImageCapture? = null
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var outputDirectory: File
+
+    // ── カメラ機能制御用 ──────────────────────────────────────────────────
+    private var cameraControl: CameraControl? = null
+    private var cameraInfo: CameraInfo? = null
+    private var flashMode = ImageCapture.FLASH_MODE_AUTO // デフォルトはAUTO
 
     // ── ライブ検出用 ─────────────────────────────────────────────────────
     private var ocrEngine: OcrEngine? = null
@@ -111,6 +122,7 @@ class CameraActivity : AppCompatActivity() {
             imageCapture = ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                 .setTargetRotation(binding.previewView.display.rotation)
+                .setFlashMode(flashMode)
                 .build()
 
             // ── ライブ検出用 ImageAnalysis ────────────────────────────────
@@ -129,14 +141,103 @@ class CameraActivity : AppCompatActivity() {
 
             try {
                 cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(
+                val camera = cameraProvider.bindToLifecycle(
                     this, cameraSelector, preview, imageCapture, imageAnalysis
                 )
+                setupCameraControls(camera)
             } catch (e: Exception) {
                 Log.e(TAG, "カメラの起動に失敗: ${e.message}", e)
                 Toast.makeText(this, "カメラの起動に失敗しました", Toast.LENGTH_SHORT).show()
             }
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    /**
+     * カメラのズーム・フラッシュ・フォーカス・明るさ調整のセットアップ
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    private fun setupCameraControls(camera: Camera) {
+        cameraControl = camera.cameraControl
+        cameraInfo = camera.cameraInfo
+
+        // 1. フラッシュ設定
+        binding.btnFlash.setOnClickListener {
+            flashMode = when (flashMode) {
+                ImageCapture.FLASH_MODE_AUTO -> ImageCapture.FLASH_MODE_ON
+                ImageCapture.FLASH_MODE_ON -> ImageCapture.FLASH_MODE_OFF
+                else -> ImageCapture.FLASH_MODE_AUTO
+            }
+            imageCapture?.flashMode = flashMode
+
+            val iconRes = when (flashMode) {
+                ImageCapture.FLASH_MODE_AUTO -> R.drawable.ic_flash_auto
+                ImageCapture.FLASH_MODE_ON -> R.drawable.ic_flash_on
+                else -> R.drawable.ic_flash_off
+            }
+            binding.btnFlash.setImageResource(iconRes)
+        }
+
+        // 2. ズーム設定 (ピンチイン・アウト)
+        val scaleGestureDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                val currentZoomRatio = cameraInfo?.zoomState?.value?.zoomRatio ?: 1f
+                val delta = detector.scaleFactor
+                cameraControl?.setZoomRatio(currentZoomRatio * delta)
+                return true
+            }
+        })
+
+        // 3. ピント合わせ (タップフォーカス)
+        binding.previewView.setOnTouchListener { _, event ->
+            scaleGestureDetector.onTouchEvent(event)
+            if (event.action == MotionEvent.ACTION_UP) {
+                val factory = binding.previewView.meteringPointFactory
+                val point = factory.createPoint(event.x, event.y)
+                val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
+                    .setAutoCancelDuration(3, TimeUnit.SECONDS)
+                    .build()
+                cameraControl?.startFocusAndMetering(action)
+
+                showFocusIndicator(event.x, event.y)
+            }
+            true
+        }
+
+        // 4. 明るさ調整 (露出補正)
+        cameraInfo?.exposureState?.let { exposureState ->
+            val range = exposureState.exposureCompensationRange
+            if (range.upper != range.lower) {
+                binding.seekExposure.max = range.upper - range.lower
+                binding.seekExposure.progress = exposureState.exposureCompensationIndex - range.lower
+
+                binding.seekExposure.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                        if (fromUser) {
+                            cameraControl?.setExposureCompensationIndex(progress + range.lower)
+                        }
+                    }
+                    override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                    override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+                })
+            }
+        }
+    }
+
+    private fun showFocusIndicator(x: Float, y: Float) {
+        val indicator = binding.focusIndicator
+        indicator.x = x - indicator.width / 2f
+        indicator.y = y - indicator.height / 2f
+        indicator.alpha = 1f
+        indicator.visibility = android.view.View.VISIBLE
+
+        indicator.animate()
+            .setStartDelay(500)
+            .setDuration(300)
+            .alpha(0f)
+            .withEndAction {
+                indicator.visibility = android.view.View.INVISIBLE
+            }
+            .start()
     }
 
     /**
@@ -247,15 +348,15 @@ class CameraActivity : AppCompatActivity() {
         super.onDestroy()
         cameraExecutor.shutdown()
 
-        // ocrEngine を null にしてから scope をキャンセルする。
-        // ONNX 推論はネイティブコードのため CancellationException では止まらない。
-        // 即座に close() するとネイティブコードが解放済みセッションにアクセスし
-        // SIGSEGV が発生するため、500ms の猶予を設けてから close() する。
+        // ライブ検出用のコルーチンスコープをキャンセル
+        analysisScope.cancel()
+
+        // OcrEngineは内部で排他制御(lock)を行っているため、
+        // 実行中の推論があればそれが完了してから安全にクローズされる。
+        // メインスレッドをブロックしないよう、ワーカースレッドでクローズする。
         val engineToClose = ocrEngine
         ocrEngine = null
-        analysisScope.cancel()
         Thread {
-            Thread.sleep(500)
             engineToClose?.close()
         }.also { it.isDaemon = true }.start()
     }
