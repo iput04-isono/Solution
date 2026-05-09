@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.LiveData
 import com.crossvision.f.data.local.AppDatabase
 import com.crossvision.f.data.model.*
+import androidx.room.withTransaction
 
 /**
  * データアクセスを一元管理するリポジトリ
@@ -50,6 +51,20 @@ class AppRepository(context: Context) {
     suspend fun replaceProcesses(processes: List<Process>) {
         processDao.deleteAll()
         processDao.insertAll(processes)
+    }
+
+    /**
+     * 工事と工程を一つのトランザクションで一括更新する（整合性維持のため）
+     */
+    suspend fun syncMasterData(constructions: List<Construction>, processes: List<Process>) {
+        db.withTransaction {
+            // 工事を削除（CASCADEにより工程も削除される）
+            constructionDao.deleteAll()
+            // 新しい工事を挿入
+            constructionDao.insertAll(constructions)
+            // 新しい工程を挿入
+            processDao.insertAll(processes)
+        }
     }
 
     // ===== 登録 =====

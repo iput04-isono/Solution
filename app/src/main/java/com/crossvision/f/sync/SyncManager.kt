@@ -139,28 +139,22 @@ class SyncManager(private val context: Context) {
         return try {
             val api = com.crossvision.f.data.api.RetrofitClient.apiService
             
-            // 工事データの同期
+            // サーバーからデータを取得
             val constResponse = api.getConstructions()
-            if (constResponse.isSuccessful) {
-                val constructions = constResponse.body() ?: emptyList()
-                repository.replaceConstructions(constructions)
-            } else {
-                Log.e(TAG, "工事同期失敗: HTTP ${constResponse.code()}")
-                return false
-            }
-
-            // 工程データの同期
             val procResponse = api.getProcesses()
-            if (procResponse.isSuccessful) {
+            
+            if (constResponse.isSuccessful && procResponse.isSuccessful) {
+                val constructions = constResponse.body() ?: emptyList()
                 val processes = procResponse.body() ?: emptyList()
-                repository.replaceProcesses(processes)
+                
+                // トランザクションで一括更新
+                repository.syncMasterData(constructions, processes)
+                Log.i(TAG, "工事・工程同期完了 (工事:${constructions.size}件, 工程:${processes.size}件)")
+                true
             } else {
-                Log.e(TAG, "工程同期失敗: HTTP ${procResponse.code()}")
-                return false
+                Log.e(TAG, "同期失敗: 工事=${constResponse.code()}, 工程=${procResponse.code()}")
+                false
             }
-
-            Log.i(TAG, "工事・工程同期完了")
-            true
         } catch (e: Exception) {
             Log.e(TAG, "工事・工程同期エラー: ${e.message}", e)
             false

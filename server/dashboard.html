@@ -254,7 +254,9 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--red);cursor:point
     </header>
     <main class="content">
       <div class="master-form">
-        <input type="number" id="newProcCid" placeholder="工事ID (例: 1)" style="width:120px" />
+        <select id="newProcCid" style="width:200px">
+          <option value="">工事を選択...</option>
+        </select>
         <input type="text" id="newProcName" placeholder="工程名 (例: 入庫)" />
         <input type="text" id="newProcCode" placeholder="コード (例: P001)" />
         <button class="btn btn-primary" onclick="addProcess()">＋ 登録</button>
@@ -590,6 +592,16 @@ async function deleteConstruction(id){
 async function fetchProcesses(){
   const res = await fetch('/api/processes');
   const data = await res.json();
+  
+  // 工事リストを取得してプルダウンを更新
+  const cRes = await fetch('/api/constructions');
+  const cData = await cRes.json();
+  const cidSelect = document.getElementById('newProcCid');
+  const currentVal = cidSelect.value;
+  cidSelect.innerHTML = '<option value="">工事を選択...</option>' + 
+    cData.map(c => `<option value="${c.id}">${c.name} (ID:${c.id})</option>`).join('');
+  cidSelect.value = currentVal;
+
   const tbody = document.getElementById('tableProcBody');
   tbody.innerHTML = data.map(d => `<tr>
     <td>${d.id}</td><td>${d.constructionId}</td><td>${d.name}</td><td>${d.code}</td>
