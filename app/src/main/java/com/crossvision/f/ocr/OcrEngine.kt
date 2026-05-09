@@ -443,6 +443,18 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
     // 多角形テキスト検出（BFS + PCA + 透視変換）
     // ──────────────────────────────────────────────────────────────────────
 
+    /**
+     * ライブビューファインダー用: 検出のみを行い、認識は実行しない。
+     *
+     * CameraActivity の ImageAnalysis アナライザーから呼ぶ。
+     * 返すポリゴンは元画像（bitmap）座標系の FloatArray(8)。
+     * UI側で PreviewView 座標系に変換してから描画すること。
+     *
+     * @param bitmap 前処理済み画像（ImagePreprocessor.preprocess() の出力）
+     * @return 検出多角形のリスト（各要素: [x0,y0, x1,y1, x2,y2, x3,y3]）
+     */
+    fun detectTextPolygonOnly(bitmap: Bitmap): List<FloatArray> = detectTextPolygon(bitmap)
+
     /** 多角形検出: BFS連結成分 → PCA最小外接矩形 → アンクリップ → 面積フィルタ */
     private fun detectTextPolygon(bitmap: Bitmap): List<FloatArray> {
         val heatMap = runDetectionModel(bitmap) ?: return emptyList()

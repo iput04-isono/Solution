@@ -1,6 +1,7 @@
 package com.crossvision.f.ui.camera
 
 import android.content.Intent
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -9,6 +10,9 @@ import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import com.crossvision.f.databinding.ActivityCameraBinding
+import com.crossvision.f.ocr.ImagePreprocessor
+import com.crossvision.f.ocr.OcrEngine
+import kotlinx.coroutines.*
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -18,7 +22,12 @@ import java.util.concurrent.Executors
 /**
  * カメラ画面
  * UI設計書 1.4.1 カメラ起動画面に準拠
- * CameraXを使用して撮影を行う
+ * CameraXを使用して撮影を行う。
+ *
+ * 【ライブビューファインダー機能】
+ * ImageAnalysis ユースケースにより、プレビュー中のフレームをDBNetに渡し、
+ * 検出された文字列領域をDetectionOverlayViewにリアルタイム描画する。
+ * 認識（ppocr_rec.onnx）はシャッター後のみ実行し、ライブでは検出のみに限定する。
  */
 class CameraActivity : AppCompatActivity() {
 
@@ -27,10 +36,30 @@ class CameraActivity : AppCompatActivity() {
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var outputDirectory: File
 
+    // ── ライブ検出用 ─────────────────────────────────────────────────────
+    private var ocrEngine: OcrEngine? = null
+    private val preprocessor = ImagePreprocessor()
+
+    /** バックグラウンド解析用スコープ */
+    private val analysisScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+    /**
+     * フレーム解析のスロットリング制御フラグ。
+     * true = 解析中 → 新しいフレームをスキップ。
+     * これにより、重い処理がキューに積み重なるのを防ぐ。
+     */
+    @Volatile private var isAnalyzing = false
+
     companion object {
         private const val TAG = "CameraActivity"
         private const val FILENAME_FORMAT = "yyyyMMdd_HHmmss"
+
+        /** ライブ検出の最小間隔（ms）。前回の解析完了からこの時間以上空けてから次を実行。 */
+        private const val ANALYSIS_INTERVAL_MS = 800L
     }
+
+    /** 最後に解析を完了した時刻（スロットリング用） */
+    private var lastAnalysisTimeMs = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +68,12 @@ class CameraActivity : AppCompatActivity() {
 
         outputDirectory = getOutputDirectory()
         cameraExecutor = Executors.newSingleThreadExecutor()
+
+        // OcrEngineをバックグラウンドで初期化（起動時のUIブロックを防ぐ）
+        analysisScope.launch {
+            ocrEngine = OcrEngine(this@CameraActivity)
+            Log.d(TAG, "OcrEngine 初期化完了（ライブ検出用）")
+        }
 
         startCamera()
         setupUI()
@@ -75,13 +110,24 @@ class CameraActivity : AppCompatActivity() {
                 .setTargetRotation(binding.previewView.display.rotation)
                 .build()
 
+            // ── ライブ検出用 ImageAnalysis ────────────────────────────────
+            val imageAnalysis = ImageAnalysis.Builder()
+                // 解析が追いつかない場合は最新フレームだけを保持（キュー溢れ防止）
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build()
+                .also { analysis ->
+                    analysis.setAnalyzer(cameraExecutor) { imageProxy ->
+                        analyzeFrame(imageProxy)
+                    }
+                }
+
             // 背面カメラを使用
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
             try {
                 cameraProvider.unbindAll()
                 cameraProvider.bindToLifecycle(
-                    this, cameraSelector, preview, imageCapture
+                    this, cameraSelector, preview, imageCapture, imageAnalysis
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "カメラの起動に失敗: ${e.message}", e)
@@ -89,6 +135,60 @@ class CameraActivity : AppCompatActivity() {
             }
         }, ContextCompat.getMainExecutor(this))
     }
+
+    /**
+     * ImageAnalysis アナライザーのコールバック。
+     * スロットリングで間引きながらDBNet検出を実行し、オーバーレイを更新する。
+     */
+    private fun analyzeFrame(imageProxy: ImageProxy) {
+        val now = System.currentTimeMillis()
+
+        // スロットリング: 前回完了から ANALYSIS_INTERVAL_MS 未満はスキップ
+        if (isAnalyzing || now - lastAnalysisTimeMs < ANALYSIS_INTERVAL_MS) {
+            imageProxy.close()
+            return
+        }
+
+        val engine = ocrEngine
+        if (engine == null) {
+            // エンジン初期化前はスキップ
+            imageProxy.close()
+            return
+        }
+
+        isAnalyzing = true
+
+        // toBitmap() は imageProxy がオープンな状態で呼ぶ必要がある。
+        // 変換後すぐ close() して CameraX にバッファを返す。
+        val bitmap: Bitmap
+        try {
+            bitmap = imageProxy.toBitmap()
+        } finally {
+            imageProxy.close()
+        }
+
+        analysisScope.launch {
+            try {
+                val processed = preprocessor.preprocess(bitmap)
+                val polygons  = engine.detectTextPolygonOnly(processed)
+
+                // UIスレッドにオーバーレイを更新を依頼
+                withContext(Dispatchers.Main) {
+                    binding.detectionOverlay.updatePolygons(
+                        polygons,
+                        processed.width,
+                        processed.height
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "ライブ検出エラー（無視して継続）: ${e.message}")
+            } finally {
+                lastAnalysisTimeMs = System.currentTimeMillis()
+                isAnalyzing = false
+            }
+        }
+    }
+
 
     private fun takePhoto() {
         val imageCapture = imageCapture ?: return
@@ -106,6 +206,9 @@ class CameraActivity : AppCompatActivity() {
             ContextCompat.getMainExecutor(this),
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                    // シャッター後はオーバーレイを消す（静止画処理画面へ遷移するため）
+                    binding.detectionOverlay.clearPolygons()
+
                     val resultIntent = Intent().apply {
                         putExtra("IMAGE_PATH", photoFile.absolutePath)
                     }
@@ -134,6 +237,9 @@ class CameraActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        analysisScope.cancel()
         cameraExecutor.shutdown()
+        ocrEngine?.close()
+        ocrEngine = null
     }
 }
