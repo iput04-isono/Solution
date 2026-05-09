@@ -2,7 +2,9 @@ package com.crossvision.f.ui.process
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import android.widget.ArrayAdapter
+import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import com.crossvision.f.data.model.Construction
@@ -10,9 +12,9 @@ import com.crossvision.f.data.model.Process
 import com.crossvision.f.data.repository.AppRepository
 import com.crossvision.f.R
 import com.crossvision.f.databinding.ActivityProcessSelectionBinding
+import com.crossvision.f.sync.SyncManager
 import com.crossvision.f.ui.library.LibraryActivity
 import com.crossvision.f.ui.recognize.RecognizeActivity
-import com.google.android.material.button.MaterialButtonToggleGroup
 
 /**
  * 工事・工程選択画面
@@ -22,7 +24,10 @@ class ProcessSelectionActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityProcessSelectionBinding
     private val viewModel: ProcessSelectionViewModel by viewModels {
-        ProcessSelectionViewModelFactory(AppRepository(applicationContext))
+        ProcessSelectionViewModelFactory(
+            AppRepository(applicationContext),
+            SyncManager(applicationContext)
+        )
     }
 
     private var userId: String = ""
@@ -41,6 +46,9 @@ class ProcessSelectionActivity : AppCompatActivity() {
         setupToolbar()
         setupUI()
         observeViewModel()
+
+        // 起動時にマスタデータを同期
+        viewModel.syncMasterData()
 
         // 自動同期タスクのスケジュール開始
         com.crossvision.f.sync.SyncWorker.schedulePeriodicSync(applicationContext)
@@ -120,7 +128,8 @@ class ProcessSelectionActivity : AppCompatActivity() {
 
         // 再読み込みボタン
         binding.btnReload.setOnClickListener {
-            android.widget.Toast.makeText(this, "マスターデータを再読み込みしています...", android.widget.Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "最新データを取得しています...", Toast.LENGTH_SHORT).show()
+            viewModel.syncMasterData()
             // UI状態のリセット
             binding.actvConstruction.setText("", false)
             binding.actvProcess.setText("", false)
@@ -138,6 +147,12 @@ class ProcessSelectionActivity : AppCompatActivity() {
     }
 
     private fun observeViewModel() {
+        // 同期状態の反映
+        viewModel.isSyncing.observe(this) { isSyncing ->
+            binding.progressSync.visibility = if (isSyncing) View.VISIBLE else View.GONE
+            binding.btnReload.isEnabled = !isSyncing
+        }
+
         // 工事一覧の反映
         viewModel.constructions.observe(this) { constructions ->
             constructionList = constructions

@@ -159,10 +159,9 @@ class RegisterActivity : AppCompatActivity() {
             .setMessage(message)
             .setCancelable(false)
             .setPositiveButton("OK") { _, _ ->
-                // 登録完了後は、この画面（および遷移元の確認画面等）を終了し、
-                // RecognizeActivity（連続撮影できるように）まで戻る
-                // FLAG_ACTIVITY_CLEAR_TOP を使わずに finish() するのが一般的。
-                // ただし、スタックを整理して RecognizeActivity まで戻したい場合は以下のようにする。
+                val intent = android.content.Intent(this, com.crossvision.f.ui.process.ProcessSelectionActivity::class.java)
+                intent.flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+                startActivity(intent)
                 finish()
             }
             .show()

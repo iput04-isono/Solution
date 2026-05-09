@@ -4,6 +4,8 @@ import androidx.lifecycle.*
 import com.crossvision.f.data.model.Construction
 import com.crossvision.f.data.model.Process
 import com.crossvision.f.data.repository.AppRepository
+import com.crossvision.f.sync.SyncManager
+import kotlinx.coroutines.launch
 
 /**
  * 工事・工程選択画面のViewModel
@@ -11,7 +13,10 @@ import com.crossvision.f.data.repository.AppRepository
 /**
  * 工事・工程選択画面のViewModel
  */
-class ProcessSelectionViewModel(private val repository: AppRepository) : ViewModel() {
+class ProcessSelectionViewModel(
+    private val repository: AppRepository,
+    private val syncManager: SyncManager
+) : ViewModel() {
 
     // 対象区分（製品、部品、置き場）
     private val _selectedCategory = MutableLiveData("product")
@@ -43,6 +48,29 @@ class ProcessSelectionViewModel(private val repository: AppRepository) : ViewMod
         addSource(_selectedProcess) { value = _selectedConstruction.value != null && it != null }
     }
 
+    // 同期状態の管理
+    private val _isSyncing = MutableLiveData(false)
+    val isSyncing: LiveData<Boolean> = _isSyncing
+
+    /**
+     * サーバーから最新のマスタデータを取得して同期する
+     */
+    fun syncMasterData() {
+        _isSyncing.value = true
+        viewModelScope.launch {
+            try {
+                // 工事・工程の同期
+                syncManager.syncConstructionsAndProcesses()
+                // ついでに製品コードマスターも同期しておく
+                syncManager.syncProductLabels()
+            } catch (e: Exception) {
+                // エラー時はログ出力のみ（オフライン等の場合があるため）
+            } finally {
+                _isSyncing.value = false
+            }
+        }
+    }
+
     fun selectConstruction(construction: Construction) {
         _selectedConstruction.value = construction
         _selectedProcess.value = null // 工事変更時に工程選択をリセット
@@ -62,12 +90,13 @@ class ProcessSelectionViewModel(private val repository: AppRepository) : ViewMod
 }
 
 class ProcessSelectionViewModelFactory(
-    private val repository: AppRepository
+    private val repository: AppRepository,
+    private val syncManager: SyncManager
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ProcessSelectionViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return ProcessSelectionViewModel(repository) as T
+            return ProcessSelectionViewModel(repository, syncManager) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
