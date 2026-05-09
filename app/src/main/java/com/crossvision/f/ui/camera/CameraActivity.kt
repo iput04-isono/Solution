@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.os.Bundle
+import android.util.Log
 import android.util.Size
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
@@ -108,6 +109,7 @@ class CameraActivity : AppCompatActivity() {
         }
     }
 
+    @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
 
@@ -118,7 +120,6 @@ class CameraActivity : AppCompatActivity() {
             val previewBuilder = Preview.Builder()
             
             // 手振れ補正を有効化 (Camera2Interopを使用)
-            @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
             Camera2Interop.Extender(previewBuilder).apply {
                 setCaptureRequestOption(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)
                 setCaptureRequestOption(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON)
@@ -134,7 +135,6 @@ class CameraActivity : AppCompatActivity() {
                 .setTargetRotation(binding.previewView.display.rotation)
                 .setFlashMode(flashMode)
             
-            @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
             Camera2Interop.Extender(imageCaptureBuilder).apply {
                 setCaptureRequestOption(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)
             }
@@ -147,7 +147,6 @@ class CameraActivity : AppCompatActivity() {
                 // 解析解像度を 1280x720 (16:9) またはそれに近い値に制限して高速化
                 .setTargetResolution(Size(1280, 720))
             
-            @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
             Camera2Interop.Extender(imageAnalysisBuilder).apply {
                 setCaptureRequestOption(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)
             }
