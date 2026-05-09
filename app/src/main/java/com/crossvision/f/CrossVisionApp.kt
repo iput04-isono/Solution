@@ -1,6 +1,7 @@
 package com.crossvision.f
 
 import android.app.Application
+import android.util.Log
 import androidx.work.Configuration
 import androidx.work.WorkManager
 
@@ -19,7 +20,7 @@ class CrossVisionApp : Application() {
         nsdHelper = com.crossvision.f.sync.NsdHelper(this)
         nsdHelper.onServerFound = { host, port ->
             val url = "http://$host:$port/"
-            android.util.Log.i("CrossVisionApp", "サーバーを発見しました: $url")
+            Log.i("CrossVisionApp", "サーバーを発見しました: $url")
             com.crossvision.f.data.api.RetrofitClient.serverBaseUrl = url
         }
         nsdHelper.startDiscovery()

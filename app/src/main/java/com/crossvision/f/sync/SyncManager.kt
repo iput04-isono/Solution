@@ -78,7 +78,7 @@ class SyncManager(private val context: Context) {
                     repository.updateSyncStatus(item.id, SyncStatus.FAILED)
                 }
             } catch (e: Exception) {
-                android.util.Log.e("SyncManager", "Sync failed for item ${item.id}", e)
+                Log.e("SyncManager", "Sync failed for item ${item.id}", e)
                 repository.updateSyncStatus(item.id, SyncStatus.FAILED)
             }
         }

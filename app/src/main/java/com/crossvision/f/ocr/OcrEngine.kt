@@ -2,6 +2,7 @@ package com.crossvision.f.ocr
 
 import android.content.Context
 import android.graphics.*
+import android.util.Log
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
@@ -121,7 +122,7 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
 
             loadLabels()
         } catch (e: Exception) {
-            android.util.Log.e("OcrEngine", "モデル読み込みエラー", e)
+            Log.e("OcrEngine", "モデル読み込みエラー", e)
         }
     }
 

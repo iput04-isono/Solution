@@ -1,10 +1,8 @@
 package com.crossvision.f.ui.register
 
 import android.os.Bundle
-import android.view.Gravity
-import android.widget.LinearLayout
+import android.util.Log
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.crossvision.f.R
@@ -13,10 +11,8 @@ import com.crossvision.f.data.model.SyncStatus
 import com.crossvision.f.data.repository.AppRepository
 import com.crossvision.f.databinding.ActivityRegisterBinding
 import com.crossvision.f.sync.SyncManager
-import com.crossvision.f.sync.SyncWorker
 import com.crossvision.f.ui.process.ProcessSelectionActivity
 import androidx.activity.result.contract.ActivityResultContracts
-import com.google.android.material.chip.Chip
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 
@@ -114,7 +110,7 @@ class RegisterActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val isOnline = syncManager.isNetworkAvailable()
-                val initialStatus = if (isOnline) SyncStatus.PENDING else SyncStatus.PENDING
+                val initialStatus = SyncStatus.PENDING
 
                 // 各製品コードを登録
                 val registrations = productCodes.map { code ->
@@ -147,6 +143,7 @@ class RegisterActivity : AppCompatActivity() {
                 }
 
             } catch (e: Exception) {
+                Log.e("RegisterActivity", "登録処理エラー", e)
                 Snackbar.make(binding.root, "登録に失敗しました: ${e.message}", Snackbar.LENGTH_LONG)
                     .show()
             } finally {
@@ -162,9 +159,10 @@ class RegisterActivity : AppCompatActivity() {
             .setMessage(message)
             .setCancelable(false)
             .setPositiveButton("OK") { _, _ ->
-                val intent = android.content.Intent(this, com.crossvision.f.ui.process.ProcessSelectionActivity::class.java)
-                intent.flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
-                startActivity(intent)
+                // 登録完了後は、この画面（および遷移元の確認画面等）を終了し、
+                // RecognizeActivity（連続撮影できるように）まで戻る
+                // FLAG_ACTIVITY_CLEAR_TOP を使わずに finish() するのが一般的。
+                // ただし、スタックを整理して RecognizeActivity まで戻したい場合は以下のようにする。
                 finish()
             }
             .show()
