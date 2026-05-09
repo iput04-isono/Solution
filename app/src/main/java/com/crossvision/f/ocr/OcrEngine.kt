@@ -74,9 +74,9 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
 
         /**
          * アンクリップ比率（矩形をどれだけ外側に膨張させるか）。
-         * 1.5→2.0: クロップ時の文字切れを防ぐため余白を増やす。
+         * 2.5→3.0: 文字に枠が被らないよう、さらにゆとりを持たせる。
          */
-        private const val UNCLIP_RATIO = 2.0f
+        private const val UNCLIP_RATIO = 3.0f
 
         /** 1枚の画像で処理する多角形領域の上限 */
         private const val MAX_REGIONS = 12
@@ -196,7 +196,9 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
             canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 this.color = Color.WHITE
                 style = Paint.Style.STROKE
-                strokeWidth = 10f
+                strokeWidth = 6f
+                strokeJoin = Paint.Join.ROUND
+                strokeCap = Paint.Cap.ROUND
             })
             // 色付き枠
             canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -487,6 +489,7 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
             .mapNotNull { comp ->
                 val rr = pcaMinRect(comp) ?: return@mapNotNull null
                 val corners = unclipRect(rr, ratio = UNCLIP_RATIO)
+                // 座標を元画像のスケールに変換
                 FloatArray(8) { i -> if (i % 2 == 0) corners[i] * scaleX else corners[i] * scaleY }
             }
             .filter { polygonArea(it) > minArea }

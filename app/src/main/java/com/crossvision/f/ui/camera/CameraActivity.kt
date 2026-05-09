@@ -5,15 +5,18 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.os.Bundle
-import android.util.Log
+import android.util.Size
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.widget.SeekBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
+import android.hardware.camera2.CaptureRequest
 import com.crossvision.f.R
 import com.crossvision.f.databinding.ActivityCameraBinding
 import com.crossvision.f.ocr.ImagePreprocessor
@@ -67,7 +70,7 @@ class CameraActivity : AppCompatActivity() {
         private const val FILENAME_FORMAT = "yyyyMMdd_HHmmss"
 
         /** ライブ検出の最小間隔（ms）。前回の解析完了からこの時間以上空けてから次を実行。 */
-        private const val ANALYSIS_INTERVAL_MS = 500L
+        private const val ANALYSIS_INTERVAL_MS = 300L
     }
 
     /** 最後に解析を完了した時刻（スロットリング用） */
@@ -112,24 +115,43 @@ class CameraActivity : AppCompatActivity() {
             val cameraProvider = cameraProviderFuture.get()
 
             // プレビュー
-            val preview = Preview.Builder()
-                .build()
+            val previewBuilder = Preview.Builder()
+            
+            // 手振れ補正を有効化 (Camera2Interopを使用)
+            @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
+            Camera2Interop.Extender(previewBuilder).apply {
+                setCaptureRequestOption(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)
+                setCaptureRequestOption(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON)
+            }
+            val preview = previewBuilder.build()
                 .also {
                     it.setSurfaceProvider(binding.previewView.surfaceProvider)
                 }
 
             // 画像キャプチャ（端末の向きに合わせた回転情報をEXIFに付与）
-            imageCapture = ImageCapture.Builder()
+            val imageCaptureBuilder = ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                 .setTargetRotation(binding.previewView.display.rotation)
                 .setFlashMode(flashMode)
-                .build()
+            
+            @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
+            Camera2Interop.Extender(imageCaptureBuilder).apply {
+                setCaptureRequestOption(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)
+            }
+            imageCapture = imageCaptureBuilder.build()
 
             // ── ライブ検出用 ImageAnalysis ────────────────────────────────
-            val imageAnalysis = ImageAnalysis.Builder()
+            val imageAnalysisBuilder = ImageAnalysis.Builder()
                 // 解析が追いつかない場合は最新フレームだけを保持（キュー溢れ防止）
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
+                // 解析解像度を 1280x720 (16:9) またはそれに近い値に制限して高速化
+                .setTargetResolution(Size(1280, 720))
+            
+            @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
+            Camera2Interop.Extender(imageAnalysisBuilder).apply {
+                setCaptureRequestOption(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)
+            }
+            val imageAnalysis = imageAnalysisBuilder.build()
                 .also { analysis ->
                     analysis.setAnalyzer(cameraExecutor) { imageProxy ->
                         analyzeFrame(imageProxy)

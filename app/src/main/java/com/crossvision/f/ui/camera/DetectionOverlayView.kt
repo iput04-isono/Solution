@@ -38,7 +38,7 @@ class DetectionOverlayView @JvmOverloads constructor(
     private val outerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         style = Paint.Style.STROKE
-        strokeWidth = 10f
+        strokeWidth = 6f
         strokeJoin = Paint.Join.ROUND
         strokeCap = Paint.Cap.ROUND
     }
