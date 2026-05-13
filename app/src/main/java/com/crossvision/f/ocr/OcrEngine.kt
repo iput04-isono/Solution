@@ -34,14 +34,24 @@ import kotlin.math.*
 class OcrEngine(private val context: Context) {
 
     companion object {
-        /** DBNet への入力画像サイズ（正方形）。モデルが 640×640 を想定して訓練されている */
-        private const val DET_SIZE = 640
+        /**
+         * DBNet への入力画像サイズ（正方形）。
+         * ver1.2 で 640 → 512 に変更。ピクセル数が 36% 削減され推論速度が向上する。
+         * この値に合わせて det.onnx も 512×512 入力用モデルに差し替え済み。
+         */
+        private const val DET_SIZE = 512
 
-        /** 1 枚の画像から処理するポリゴン領域の最大数。多すぎると処理が遅くなるため上限を設ける */
-        private const val MAX_POLYGON_REGIONS = 24
+        /**
+         * 1 枚の画像から処理するポリゴン領域の最大数。
+         * ver1.2 で 24 → 12 に変更。処理時間の上限を絞り誤検出を抑制する。
+         */
+        private const val MAX_POLYGON_REGIONS = 12
 
-        /** SVTR 認識モデルへの入力幅の最大値。これを超えるとメモリ消費が急増するため上限を設ける */
-        private const val MAX_REC_WIDTH = 640
+        /**
+         * SVTR 認識モデルへの入力幅の最大値。
+         * ver1.2 で 640 → 512 に変更。DET_SIZE の縮小に合わせてメモリ使用量を削減する。
+         */
+        private const val MAX_REC_WIDTH = 512
 
         /** SVTR 認識モデルへの入力高さ（固定値）。モデルが 48px を前提に訓練されている */
         private const val REC_HEIGHT = 48
@@ -822,12 +832,14 @@ class OcrEngine(private val context: Context) {
         var darkCount = 0      // 輝度 < 80 のピクセル数
         var brightCount = 0    // 輝度 > 175 のピクセル数
         var edgeLikeCount = 0  // 輝度 < 110 のピクセル数（エッジ・暗い文字の近似）
+        var sumLum = 0f        // 全ピクセル輝度の合計（将来の平均輝度チェック用に計測）
         var minLum = 255f; var maxLum = 0f
 
         for (p in pixels) {
             val r = Color.red(p); val g = Color.green(p); val b = Color.blue(p)
             val lum = r * 0.299f + g * 0.587f + b * 0.114f
             if (lum < minLum) minLum = lum; if (lum > maxLum) maxLum = lum
+            sumLum += lum  // 平均輝度算出用に積算（現バージョンでは判定に未使用）
             if (lum < 80f) darkCount++
             if (lum > 175f) brightCount++
 
