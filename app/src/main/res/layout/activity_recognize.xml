@@ -23,21 +23,22 @@
         android:layout_weight="1"
         android:fillViewport="true">
 
-        <LinearLayout
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center"
             android:padding="@dimen/spacing_lg">
 
             <!-- 画像プレビューエリア -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardImagePreview"
                 android:layout_width="match_parent"
-                android:layout_height="320dp"
+                android:layout_height="0dp"
+                app:layout_constraintDimensionRatio="H,4:3"
                 app:cardCornerRadius="@dimen/card_corner_radius"
                 app:cardElevation="4dp"
-                android:layout_marginBottom="@dimen/spacing_lg">
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
 
                 <FrameLayout
                     android:layout_width="match_parent"
@@ -48,7 +49,7 @@
                         android:id="@+id/ivPreview"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:scaleType="centerCrop"
+                        android:scaleType="fitCenter"
                         android:visibility="gone"
                         android:contentDescription="撮影画像プレビュー" />
 
@@ -59,13 +60,14 @@
                         android:layout_height="match_parent"
                         android:orientation="vertical"
                         android:gravity="center"
-                        android:background="#F0F0F0">
+                        android:background="#F8F9FA">
 
                         <ImageView
                             android:layout_width="80dp"
                             android:layout_height="80dp"
                             android:src="@android:drawable/ic_menu_camera"
-                            android:alpha="0.3"
+                            android:alpha="0.2"
+                            app:tint="@color/primary"
                             android:contentDescription="カメラアイコン" />
 
                         <TextView
@@ -82,15 +84,19 @@
                 </FrameLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- 手動回転ボタン（画像選択後に表示） -->
+            <!-- 手動回転ボタン -->
             <LinearLayout
                 android:id="@+id/rotationLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center"
-                android:visibility="gone"
-                android:layout_marginBottom="@dimen/spacing_sm">
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:alpha="0.5"
+                android:enabled="false"
+                app:layout_constraintTop_toBottomOf="@id/cardImagePreview"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnRotateLeft"
@@ -111,11 +117,16 @@
 
             </LinearLayout>
 
-            <!-- 操作ボタン -->
+            <!-- 操作ボタン（カメラ・ギャラリー） -->
             <LinearLayout
+                android:id="@+id/sourceButtonsLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:layout_marginTop="@dimen/spacing_md"
+                app:layout_constraintTop_toBottomOf="@id/rotationLayout"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnCamera"
@@ -140,7 +151,7 @@
 
             </LinearLayout>
 
-            <!-- 認識実行ボタン（画像選択後に表示） -->
+            <!-- 認識実行ボタン -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnRecognize"
                 style="@style/PrimaryButton"
@@ -148,11 +159,18 @@
                 android:layout_height="wrap_content"
                 android:minHeight="@dimen/button_height_large"
                 android:text="文字を認識する"
-                android:visibility="gone"
-                android:layout_marginTop="@dimen/spacing_md"
-                app:backgroundTint="@color/secondary" />
+                android:enabled="false"
+                android:alpha="0.5"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:layout_marginBottom="@dimen/spacing_lg"
+                app:backgroundTint="@color/secondary"
+                app:layout_constraintTop_toBottomOf="@id/sourceButtonsLayout"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintVertical_bias="1.0" />
 
-        </LinearLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
     </androidx.core.widget.NestedScrollView>
 
     <!-- ローディング -->
