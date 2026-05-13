@@ -33,6 +33,7 @@ class ConfirmActivity : AppCompatActivity() {
     private var constructionName = ""
     private var processName = ""
     private var userId = ""
+    private var overlayBitmap: android.graphics.Bitmap? = null
 
     // ズーム・パン用
     private var imageMatrix = Matrix()
@@ -103,8 +104,12 @@ class ConfirmActivity : AppCompatActivity() {
         if (path == null) return
         val file = File(path)
         if (!file.exists()) return
-        val bitmap = BitmapFactory.decodeFile(path) ?: return
         
+        // 以前のビットマップがあれば解放
+        overlayBitmap?.recycle()
+        overlayBitmap = BitmapFactory.decodeFile(path)
+        
+        val bitmap = overlayBitmap ?: return
         binding.ivOverlay.setImageBitmap(bitmap)
         binding.ivOverlay.visibility = View.VISIBLE
         binding.ivOverlay.scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
@@ -177,6 +182,10 @@ class ConfirmActivity : AppCompatActivity() {
             }
             imageView.imageMatrix = matrix
             true
+        }
+
+        dialog.setOnDismissListener {
+            imageView.setImageDrawable(null) // メモリ解放を助ける
         }
 
         dialog.show()
@@ -417,5 +426,11 @@ class ConfirmActivity : AppCompatActivity() {
             )
         }
         startActivity(intent)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        overlayBitmap?.recycle()
+        overlayBitmap = null
     }
 }
