@@ -50,6 +50,17 @@
 
         </LinearLayout>
 
+        <!-- 候補ボタン -->
+        <ImageButton
+            android:id="@+id/btnCandidates"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_search"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="@color/primary"
+            android:visibility="gone"
+            android:contentDescription="候補から選択" />
+
         <!-- 編集ボタン -->
         <ImageButton
             android:id="@+id/btnEdit"

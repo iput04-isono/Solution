@@ -59,6 +59,7 @@ class OcrProcessor(private val context: Context) {
                     matchedLabel = match.label,
                     matchDistance = match.distance,
                     isExactMatch = match.isExactMatch,
+                    isAmbiguous = match.isAmbiguous,
                     labelCandidates = topCandidates.map { it.label }
                 )
             )
@@ -111,6 +112,7 @@ class OcrProcessor(private val context: Context) {
                     matchedLabel    = match?.label,          // null = 距離 > 3
                     matchDistance   = match?.distance ?: Int.MAX_VALUE,
                     isExactMatch    = match?.isExactMatch ?: false,
+                    isAmbiguous     = match?.isAmbiguous ?: false,
                     labelCandidates = topCandidates.map { it.label }
                 )
             }
@@ -137,6 +139,7 @@ data class DomainOcrResult(
     val matchedLabel: String? = null,         // 正解ラベルとの照合結果（null=未マッチ）
     val matchDistance: Int = Int.MAX_VALUE,   // 編集距離（0=完全一致）
     val isExactMatch: Boolean = false,        // 完全一致フラグ
+    val isAmbiguous: Boolean = false,         // 曖昧判定フラグ（同点候補あり）
     val labelCandidates: List<String> = emptyList() // 候補ラベル上位3件
 ) {
     /** 確定表示用コード：ラベルマッチがあれば正解ラベルを、未マッチならOCR結果を使用 */

@@ -37,7 +37,7 @@ class LabelMatcher private constructor(rawLabels: List<String>, source: String) 
     // ──────────────────────────────────────────────────────────────────────
 
     /**
-     * 上位候補を返す（編集距離が小さい順、最大 [maxResults] 件）。
+     * 上位候補を返す（編集距離が小さい順、タイブレークあり）。
      */
     fun findTopCandidates(ocrText: String, maxResults: Int = 3): List<MatchResult> {
         if (ocrText.length < MIN_OCR_LEN) return emptyList()
@@ -45,21 +45,57 @@ class LabelMatcher private constructor(rawLabels: List<String>, source: String) 
         val normOcr = normalize(ocrText)
         val variants = generateVariants(normOcr)
 
-        val candidates = normalizedLabels.mapIndexed { idx, normLabel ->
+        // 全ラベルに対してスコアを計算
+        val scoredCandidates = normalizedLabels.mapIndexed { idx, normLabel ->
+            // オリジナルのOCR文字と各種バリアント（0/O変換など）の中で最小の距離を採用
             val minDist = variants.minOf { editDistance(it, normLabel) }
-            minDist to idx
-        }.filter { (dist, _) -> dist <= MAX_EDIT_DISTANCE }
-            .sortedBy { (dist, _) -> dist }
-            .take(maxResults)
-
-        return candidates.map { (dist, idx) ->
-            MatchResult(
-                label = labels[idx],
-                distance = dist,
-                isExactMatch = dist == 0
+            
+            // スコア要素: 1.編集距離, 2.文字数差, 3.元の位置(インデックス)
+            Candidate(
+                index = idx,
+                distance = minDist,
+                lengthDiff = Math.abs(normOcr.length - normLabel.length)
             )
         }
+
+        // フィルタとソート
+        val filtered = scoredCandidates
+            .filter { it.distance <= MAX_EDIT_DISTANCE }
+            .sortedWith(
+                compareBy<Candidate> { it.distance }       // 第1優先: 編集距離（小）
+                    .thenBy { it.lengthDiff }              // 第2優先: 文字数差（小）
+                    .thenBy { it.index }                   // 第3優先: 元のリスト順（現状維持用）
+            )
+            .take(maxResults + 1) // 曖昧さ判定のために1件多めに取る
+
+        if (filtered.isEmpty()) return emptyList()
+
+        val results = filtered.take(maxResults).map { cand ->
+            MatchResult(
+                label = labels[cand.index],
+                distance = cand.distance,
+                isExactMatch = cand.distance == 0
+            )
+        }
+
+        // 曖昧さの判定: 1位と2位の距離が同じ、かつ文字数差も同じなら「曖昧」とする
+        if (filtered.size >= 2) {
+            val first = filtered[0]
+            val second = filtered[1]
+            if (first.distance == second.distance && first.lengthDiff == second.lengthDiff) {
+                // 1位の候補に曖昧フラグを立てる
+                return listOf(results[0].copy(isAmbiguous = true)) + results.drop(1)
+            }
+        }
+
+        return results
     }
+
+    private data class Candidate(
+        val index: Int,
+        val distance: Int,
+        val lengthDiff: Int
+    )
 
     /**
      * 最もスコアの高い1件を返す。マッチなしは null。
@@ -72,7 +108,10 @@ class LabelMatcher private constructor(rawLabels: List<String>, source: String) 
     // ──────────────────────────────────────────────────────────────────────
 
     private fun normalize(text: String): String =
-        text.uppercase().trim().replace(" ", "").replace("\u3000", "")
+        text.uppercase().trim()
+            .replace(" ", "")
+            .replace("-", "") // ハイフンを除去して照合の耐性を上げる
+            .replace("\u3000", "")
 
     /**
      * OCRの読み誤りパターンを考慮したバリアント生成。
@@ -187,5 +226,6 @@ class LabelMatcher private constructor(rawLabels: List<String>, source: String) 
 data class MatchResult(
     val label: String,
     val distance: Int,
-    val isExactMatch: Boolean
+    val isExactMatch: Boolean,
+    val isAmbiguous: Boolean = false // スコアが同点の候補が複数ある場合に true
 )

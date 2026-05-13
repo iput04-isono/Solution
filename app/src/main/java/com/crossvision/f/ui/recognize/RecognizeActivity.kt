@@ -184,6 +184,9 @@ class RecognizeActivity : AppCompatActivity() {
             // ラベル距離 ≤ 3（登録候補）
             putStringArrayListExtra("PRODUCT_CODES", ArrayList(matched.map { it.displayCode }))
             putStringArrayListExtra("RAW_TEXTS",     ArrayList(matched.map { it.rawText }))
+            putStringArrayListExtra("CANDIDATES_LIST", ArrayList(matched.map { it.labelCandidates.joinToString("|") }))
+            putExtra("AMBIGUOUS_FLAGS", matched.map { it.isAmbiguous }.toBooleanArray())
+            
             putStringArrayListExtra("DEBUG_INFO", ArrayList(matched.map { r ->
                 val conf  = "%.2f".format(r.confidence)
                 val dist  = r.matchDistance.toString()

@@ -54,13 +54,15 @@ class ConfirmActivity : AppCompatActivity() {
 
         val productCodes    = intent.getStringArrayListExtra("PRODUCT_CODES") ?: arrayListOf()
         val rawTexts        = intent.getStringArrayListExtra("RAW_TEXTS") ?: arrayListOf()
+        val candidatesStrs  = intent.getStringArrayListExtra("CANDIDATES_LIST") ?: arrayListOf()
+        val ambiguousFlags  = intent.getBooleanArrayExtra("AMBIGUOUS_FLAGS") ?: booleanArrayOf()
         val debugInfo       = intent.getStringArrayListExtra("DEBUG_INFO") ?: arrayListOf()
         val unmatchedTexts  = intent.getStringArrayListExtra("UNMATCHED_TEXTS") ?: arrayListOf()
         val overlayPath     = intent.getStringExtra("OVERLAY_IMAGE_PATH")
 
         setupToolbar()
         setupOverlayImage(overlayPath)
-        setupRecyclerView(productCodes, rawTexts, debugInfo)
+        setupRecyclerView(productCodes, rawTexts, candidatesStrs, ambiguousFlags, debugInfo)
         setupUnmatchedSection(unmatchedTexts)
         updateProcessInfoUI()
         setupUI()
@@ -115,9 +117,16 @@ class ConfirmActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupRecyclerView(codes: List<String>, rawTexts: List<String>, debugInfo: List<String> = emptyList()) {
+    private fun setupRecyclerView(
+        codes: List<String>, 
+        rawTexts: List<String>, 
+        candidatesStrs: List<String>,
+        ambiguousFlags: BooleanArray,
+        debugInfo: List<String> = emptyList()
+    ) {
         adapter = RecognizedProductAdapter(
             onEditClick = { position -> showEditDialog(position) },
+            onCandidateClick = { position -> showCandidatesDialog(position) },
             onDeleteClick = { position -> showDeleteDialog(position) },
             onSelectionChanged = { _, _ -> updateRegisterButton() }
         )
@@ -128,17 +137,44 @@ class ConfirmActivity : AppCompatActivity() {
         val items = codes.mapIndexed { index, code ->
             val raw = rawTexts.getOrElse(index) { code }
             val debug = debugInfo.getOrElse(index) { "" }
+            val cands = candidatesStrs.getOrElse(index) { "" }.split("|").filter { it.isNotEmpty() }
+            val isAmb = ambiguousFlags.getOrElse(index) { false }
+            
             // デバッグ時：rawTextにデバッグ情報を付加して表示
             val displayRaw = if (debug.isNotEmpty()) "$raw\n[$debug]" else raw
             RecognizedItem(
                 productCode = code,
-                rawText = displayRaw
+                rawText = displayRaw,
+                candidates = cands,
+                isAmbiguous = isAmb
             )
         }
         adapter.setItems(items)
 
         updateResultCount()
         updateEmptyState()
+    }
+
+    private fun showCandidatesDialog(position: Int) {
+        val item = adapter.getItems()[position]
+        val candidates = item.candidates
+        if (candidates.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("候補なし")
+                .setMessage("類似する製品コードは見つかりませんでした。手動で修正してください。")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("候補から選択")
+            .setItems(candidates.toTypedArray()) { _, which ->
+                val selected = candidates[which]
+                adapter.updateItem(position, selected)
+            }
+            .setNegativeButton("キャンセル", null)
+            .show()
     }
 
     private fun setupUI() {
