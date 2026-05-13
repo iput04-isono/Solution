@@ -106,7 +106,27 @@ class ConfirmActivity : AppCompatActivity() {
         
         // 以前のビットマップがあれば解放
         overlayBitmap?.recycle()
-        overlayBitmap = BitmapFactory.decodeFile(path)
+        
+        // メモリ節約のため、リサイズして読み込む
+        val options = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        BitmapFactory.decodeFile(path, options)
+        
+        // 長辺を1280px程度に制限（メモリ不足とANR対策）
+        val targetSize = 1280
+        var inSampleSize = 1
+        if (options.outHeight > targetSize || options.outWidth > targetSize) {
+            val halfHeight = options.outHeight / 2
+            val halfWidth = options.outWidth / 2
+            while (halfHeight / inSampleSize >= targetSize && halfWidth / inSampleSize >= targetSize) {
+                inSampleSize *= 2
+            }
+        }
+        
+        options.inJustDecodeBounds = false
+        options.inSampleSize = inSampleSize
+        overlayBitmap = BitmapFactory.decodeFile(path, options)
         
         val bitmap = overlayBitmap ?: return
         binding.ivOverlay.setImageBitmap(bitmap)

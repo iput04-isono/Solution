@@ -71,7 +71,11 @@ class RecognizedProductAdapter(
 
             val cropPath = item.cropImagePath
             if (cropPath != null) {
-                val bmp = BitmapFactory.decodeFile(cropPath)
+                // クロップ画像も念のためリサイズして読み込む（メモリ節約）
+                val options = BitmapFactory.Options().apply {
+                    inSampleSize = 1 // クロップ画像は通常小さいので1で良いが、念のためオプションを指定
+                }
+                val bmp = BitmapFactory.decodeFile(cropPath, options)
                 if (bmp != null) {
                     binding.ivCrop.setImageBitmap(bmp)
                     binding.ivCrop.visibility = View.VISIBLE
