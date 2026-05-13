@@ -1,6 +1,8 @@
 package com.crossvision.f.ui.confirm
 
+import android.graphics.BitmapFactory
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.crossvision.f.databinding.ItemRecognizedProductBinding
@@ -10,7 +12,6 @@ import com.crossvision.f.databinding.ItemRecognizedProductBinding
  */
 class RecognizedProductAdapter(
     private val onEditClick: (Int) -> Unit,
-    private val onCandidateClick: (Int) -> Unit,
     private val onDeleteClick: (Int) -> Unit,
     private val onSelectionChanged: (Int, Boolean) -> Unit
 ) : RecyclerView.Adapter<RecognizedProductAdapter.ViewHolder>() {
@@ -68,17 +69,17 @@ class RecognizedProductAdapter(
             binding.tvRawText.text = if (item.isEdited) "（手動修正済み）" else "認識テキスト: ${item.rawText}"
             binding.cbSelect.isChecked = item.isSelected
 
-            // 曖昧判定または候補がある場合にボタンを表示
-            if (item.isAmbiguous || item.candidates.isNotEmpty()) {
-                binding.btnCandidates.visibility = android.view.View.VISIBLE
-                if (item.isAmbiguous && !item.isEdited) {
-                    binding.tvProductCode.setTextColor(android.graphics.Color.parseColor("#E65100")) // オレンジ（警告色）
+            val cropPath = item.cropImagePath
+            if (cropPath != null) {
+                val bmp = BitmapFactory.decodeFile(cropPath)
+                if (bmp != null) {
+                    binding.ivCrop.setImageBitmap(bmp)
+                    binding.ivCrop.visibility = View.VISIBLE
                 } else {
-                    binding.tvProductCode.setTextColor(android.graphics.Color.parseColor("#212121")) // 標準
+                    binding.ivCrop.visibility = View.GONE
                 }
             } else {
-                binding.btnCandidates.visibility = android.view.View.GONE
-                binding.tvProductCode.setTextColor(android.graphics.Color.parseColor("#212121"))
+                binding.ivCrop.visibility = View.GONE
             }
 
             binding.cbSelect.setOnCheckedChangeListener { _, isChecked ->
@@ -86,7 +87,6 @@ class RecognizedProductAdapter(
                 onSelectionChanged(position, isChecked)
             }
 
-            binding.btnCandidates.setOnClickListener { onCandidateClick(position) }
             binding.btnEdit.setOnClickListener { onEditClick(position) }
             binding.btnDelete.setOnClickListener { onDeleteClick(position) }
         }
@@ -99,8 +99,7 @@ class RecognizedProductAdapter(
 data class RecognizedItem(
     val productCode: String,
     val rawText: String = "",
-    val candidates: List<String> = emptyList(),
-    val isAmbiguous: Boolean = false,
     val isSelected: Boolean = true,
-    val isEdited: Boolean = false
+    val isEdited: Boolean = false,
+    val cropImagePath: String? = null
 )
