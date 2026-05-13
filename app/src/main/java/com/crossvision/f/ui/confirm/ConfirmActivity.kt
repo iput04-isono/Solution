@@ -124,15 +124,44 @@ class ConfirmActivity : AppCompatActivity() {
     @SuppressLint("ClickableViewAccessibility")
     private fun showFullScreenImage(bitmap: android.graphics.Bitmap) {
         val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
-        val imageView = android.widget.ImageView(this).apply {
-            setImageBitmap(bitmap)
-            scaleType = android.widget.ImageView.ScaleType.MATRIX
+        
+        // メインコンテナ
+        val root = android.widget.FrameLayout(this).apply {
             layoutParams = android.view.ViewGroup.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT
             )
+            setBackgroundColor(android.graphics.Color.BLACK)
         }
-        dialog.setContentView(imageView)
+
+        // ズーム可能な画像
+        val imageView = android.widget.ImageView(this).apply {
+            setImageBitmap(bitmap)
+            scaleType = android.widget.ImageView.ScaleType.MATRIX
+            layoutParams = android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        }
+        root.addView(imageView)
+
+        // 閉じるボタン (X)
+        val closeButton = android.widget.ImageButton(this).apply {
+            setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
+            background = android.graphics.drawable.ColorDrawable(android.graphics.Color.parseColor("#44000000"))
+            imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
+            layoutParams = android.widget.FrameLayout.LayoutParams(
+                (48 * resources.displayMetrics.density).toInt(),
+                (48 * resources.displayMetrics.density).toInt()
+            ).apply {
+                gravity = android.view.Gravity.TOP or android.view.Gravity.END
+                setMargins(0, (16 * resources.displayMetrics.density).toInt(), (16 * resources.displayMetrics.density).toInt(), 0)
+            }
+            setOnClickListener { dialog.dismiss() }
+        }
+        root.addView(closeButton)
+
+        dialog.setContentView(root)
 
         val matrix = Matrix()
         val savedMat = Matrix()
