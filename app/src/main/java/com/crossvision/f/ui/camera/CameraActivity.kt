@@ -77,7 +77,7 @@ class CameraActivity : AppCompatActivity() {
         private const val FILENAME_FORMAT = "yyyyMMdd_HHmmss"
 
         /** ライブ検出の最小間隔（ms）。前回の解析完了からこの時間以上空けてから次を実行。 */
-        private const val ANALYSIS_INTERVAL_MS = 300L
+        private const val ANALYSIS_INTERVAL_MS = 1000L
     }
 
     /** 最後に解析を完了した時刻（スロットリング用） */
@@ -149,8 +149,8 @@ class CameraActivity : AppCompatActivity() {
             val imageAnalysisBuilder = ImageAnalysis.Builder()
                 // 解析が追いつかない場合は最新フレームだけを保持（キュー溢れ防止）
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                // 解析解像度を 1280x720 (16:9) またはそれに近い値に制限して高速化
-                .setTargetResolution(Size(1280, 720))
+                // 解析解像度を下げることでメモリ負荷と計算コストを抑制
+                .setTargetResolution(Size(640, 360))
             
             Camera2Interop.Extender(imageAnalysisBuilder).apply {
                 setCaptureRequestOption(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)
