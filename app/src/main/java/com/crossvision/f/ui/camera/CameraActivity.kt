@@ -93,6 +93,9 @@ class CameraActivity : AppCompatActivity() {
     private fun takePhoto() {
         val imageCapture = imageCapture ?: return
 
+        // 撮影直前に端末の向きを再取得して回転情報を更新（カメラ起動後に回転した場合に対応）
+        binding.previewView.display?.rotation?.let { imageCapture.targetRotation = it }
+
         val photoFile = File(
             outputDirectory,
             SimpleDateFormat(FILENAME_FORMAT, Locale.JAPAN)

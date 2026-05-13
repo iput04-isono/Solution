@@ -111,7 +111,8 @@ class OcrProcessor(private val context: Context) {
                     matchedLabel    = match?.label,          // null = 距離 > 3
                     matchDistance   = match?.distance ?: Int.MAX_VALUE,
                     isExactMatch    = match?.isExactMatch ?: false,
-                    labelCandidates = topCandidates.map { it.label }
+                    labelCandidates = topCandidates.map { it.label },
+                    cropImagePath   = res.cropImagePath
                 )
             }
             Pair(overlayBitmap, domainResults)
@@ -137,7 +138,8 @@ data class DomainOcrResult(
     val matchedLabel: String? = null,         // 正解ラベルとの照合結果（null=未マッチ）
     val matchDistance: Int = Int.MAX_VALUE,   // 編集距離（0=完全一致）
     val isExactMatch: Boolean = false,        // 完全一致フラグ
-    val labelCandidates: List<String> = emptyList() // 候補ラベル上位3件
+    val labelCandidates: List<String> = emptyList(), // 候補ラベル上位3件
+    val cropImagePath: String? = null         // クロップ画像キャッシュパス（UI表示用）
 ) {
     /** 確定表示用コード：ラベルマッチがあれば正解ラベルを、未マッチならOCR結果を使用 */
     val displayCode: String

@@ -184,6 +184,7 @@ class RecognizeActivity : AppCompatActivity() {
             // ラベル距離 ≤ 3（登録候補）
             putStringArrayListExtra("PRODUCT_CODES", ArrayList(matched.map { it.displayCode }))
             putStringArrayListExtra("RAW_TEXTS",     ArrayList(matched.map { it.rawText }))
+            putStringArrayListExtra("CROP_PATHS",    ArrayList(matched.map { it.cropImagePath ?: "" }))
             putStringArrayListExtra("DEBUG_INFO", ArrayList(matched.map { r ->
                 val conf  = "%.2f".format(r.confidence)
                 val dist  = r.matchDistance.toString()

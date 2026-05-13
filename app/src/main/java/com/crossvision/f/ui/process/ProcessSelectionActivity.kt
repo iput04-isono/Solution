@@ -65,7 +65,7 @@ class ProcessSelectionActivity : AppCompatActivity() {
                 // UI状態のリセット
                 binding.actvConstruction.setText("", false)
                 binding.actvProcess.setText("", false)
-                binding.tilProcess.isEnabled = false
+                setProcessEnabled(false)
             }
         }
 
@@ -74,7 +74,7 @@ class ProcessSelectionActivity : AppCompatActivity() {
             val selected = constructionList[position]
             viewModel.selectConstruction(selected)
             binding.actvProcess.setText("", false)
-            binding.tilProcess.isEnabled = true
+            setProcessEnabled(true)
         }
 
         // 工程選択
@@ -124,7 +124,7 @@ class ProcessSelectionActivity : AppCompatActivity() {
             // UI状態のリセット
             binding.actvConstruction.setText("", false)
             binding.actvProcess.setText("", false)
-            binding.tilProcess.isEnabled = false
+            setProcessEnabled(false)
         }
 
         // ログアウトボタン
@@ -135,6 +135,16 @@ class ProcessSelectionActivity : AppCompatActivity() {
             startActivity(intent)
             finish()
         }
+    }
+
+    /**
+     * 工程ドロップダウンの有効/無効を切り替える。
+     * TextInputLayout だけでなく内部の AutoCompleteTextView も明示的に操作することで、
+     * 再有効化後にクリックイベントが届かないバグを防ぐ。
+     */
+    private fun setProcessEnabled(enabled: Boolean) {
+        binding.tilProcess.isEnabled = enabled
+        binding.actvProcess.isEnabled = enabled
     }
 
     private fun observeViewModel() {

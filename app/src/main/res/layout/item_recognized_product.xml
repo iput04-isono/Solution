@@ -13,60 +13,81 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="@dimen/spacing_md"
-        android:gravity="center_vertical">
+        android:orientation="vertical">
 
-        <!-- チェックボックス -->
-        <CheckBox
-            android:id="@+id/cbSelect"
-            android:layout_width="wrap_content"
+        <!-- クロップ画像（OCRで切り取った文字領域・回転後横長表示）-->
+        <ImageView
+            android:id="@+id/ivCrop"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:checked="true" />
+            android:adjustViewBounds="true"
+            android:maxHeight="120dp"
+            android:minHeight="40dp"
+            android:scaleType="fitCenter"
+            android:background="#111111"
+            android:visibility="gone"
+            android:contentDescription="認識対象のクロップ画像" />
 
-        <!-- 製品コード情報 -->
+        <!-- チェックボックス＋製品コード情報＋操作ボタン -->
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:layout_marginStart="@dimen/spacing_sm">
+            android:orientation="horizontal"
+            android:padding="@dimen/spacing_md"
+            android:gravity="center_vertical">
 
-            <TextView
-                android:id="@+id/tvProductCode"
-                android:layout_width="match_parent"
+            <!-- チェックボックス -->
+            <CheckBox
+                android:id="@+id/cbSelect"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="@dimen/text_subtitle"
-                android:textStyle="bold"
-                android:textColor="@color/text_primary" />
+                android:checked="true" />
 
-            <TextView
-                android:id="@+id/tvRawText"
-                android:layout_width="match_parent"
+            <!-- 製品コード情報 -->
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:textSize="@dimen/text_small"
-                android:textColor="@color/text_secondary"
-                android:layout_marginTop="2dp" />
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="@dimen/spacing_sm">
+
+                <TextView
+                    android:id="@+id/tvProductCode"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="@dimen/text_subtitle"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary" />
+
+                <TextView
+                    android:id="@+id/tvRawText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="@dimen/text_small"
+                    android:textColor="@color/text_secondary"
+                    android:layout_marginTop="2dp" />
+
+            </LinearLayout>
+
+            <!-- 編集ボタン -->
+            <ImageButton
+                android:id="@+id/btnEdit"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@android:drawable/ic_menu_edit"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/btn_edit" />
+
+            <!-- 削除ボタン -->
+            <ImageButton
+                android:id="@+id/btnDelete"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@android:drawable/ic_menu_delete"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/btn_delete" />
 
         </LinearLayout>
-
-        <!-- 編集ボタン -->
-        <ImageButton
-            android:id="@+id/btnEdit"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:src="@android:drawable/ic_menu_edit"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/btn_edit" />
-
-        <!-- 削除ボタン -->
-        <ImageButton
-            android:id="@+id/btnDelete"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:src="@android:drawable/ic_menu_delete"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/btn_delete" />
 
     </LinearLayout>
 

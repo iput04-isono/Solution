@@ -5,84 +5,39 @@ import android.graphics.*
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import java.io.File
 import java.nio.FloatBuffer
 import java.util.*
 import java.util.concurrent.Executors
-import java.util.concurrent.Future
 import kotlin.math.*
 
 /**
  * PaddleOCR（ONNX Runtime）による文字認識エンジン。
  *
- * 【使い方】
- *   val engine = OcrEngine(context)
- *   val preprocessor = ImagePreprocessor()
- *
- *   // 標準（矩形検出）
- *   val results: List<OcrResult> = engine.runOcr(preprocessor.preprocess(bitmap))
- *
- *   // 高精度（多角形検出・斜め文字対応）
- *   val results: List<OcrResult> = engine.runOcrPolygon(preprocessor.preprocess(bitmap))
- *
- *   for (result in results) {
- *       // result.text       → 認識文字列（例: "BISb30N-7A"）
- *       // result.confidence → 信頼度（0.0〜1.0）
- *   }
- *
- *   engine.close() // 使い終わったら解放
- *
- * 【信頼度の目安（アプリ側UI分岐用）】
- *   ≥ 0.85  → 自動確定候補
- *   0.60〜0.85 → ユーザー確認を促す
- *   < 0.60  → 再撮影を促す
- *
- * 【必要なassets】
- *   det.onnx       テキスト領域検出モデル（PP-OCRv4 DBNet）
- *   ppocr_rec.onnx テキスト認識モデル（PP-OCRv4 mobile rec + SVTR）
- *   dict.txt       認識文字辞書
+ * 改善点（prototype_Ver2.0 からの変更）:
+ *   - コントラスト強化: スキップ閾値 20f→5f、パーセンタイルクリッピング追加
+ *   - DBNet入力: 縦横比保持＋グレーパディング（アスペクト比が崩れない）
+ *   - 向き認識: 曖昧なアスペクト比のとき4方向すべて試す
+ *   - クロップ画像をキャッシュに保存し結果に添付（UI表示用）
  */
 class OcrEngine(private val context: Context, private val labelMatcher: LabelMatcher? = null) {
 
     companion object {
-        /** この信頼度未満の認識結果は誤検出とみなして除外する */
         private const val CONFIDENCE_THRESHOLD = 0.15f
-
-        /** この信頼度未満なら逆向きも試して良い方を採用する */
         private const val RETRY_THRESHOLD = 0.30f
-
-        /** 検出モデルへの入力解像度 */
         private const val DET_SIZE = 640
-
-        /**
-         * 多角形検出のヒートマップ閾値。
-         * 0.38→0.28: カメラ画像では文字が小さくヒートマップ値が低めになるため緩和。
-         * 下げすぎると誤検出増加。LabelMatcherでフィルタするので少し低めでOK。
-         */
         private const val DET_THRESHOLD = 0.28f
-
-        /**
-         * BFS連結成分の最小ピクセル数。
-         * 60→25: カメラ画像で文字が640px検出マップ上で小さくなるため緩和。
-         */
         private const val BFS_MIN_PX = 25
-
-        /**
-         * 有効多角形の最小面積（640px検出マップ座標系）。
-         * 300→100: 小さい文字領域も拾えるよう緩和。
-         */
         private const val MIN_POLY_AREA = 100f
-
-        /**
-         * アンクリップ比率（矩形をどれだけ外側に膨張させるか）。
-         * 1.5→2.0: クロップ時の文字切れを防ぐため余白を増やす。
-         */
         private const val UNCLIP_RATIO = 2.0f
-
-        /** 1枚の画像で処理する多角形領域の上限 */
         private const val MAX_REGIONS = 12
-
-        /** 認識モデルへの入力幅の上限（推論時間を制限） */
         private const val MAX_REC_WIDTH = 640
+
+        // スキップ閾値: 20f → 5f（錆で輝度差が小さい場合もコントラスト処理する）
+        private const val CONTRAST_SKIP_THRESHOLD = 5f
+        // パーセンタイルクリッピング: 上下2%の外れ値を除外してからストレッチ
+        // 反射光1点があっても stretch が台無しにならない
+        private const val CONTRAST_CLIP_PERCENT = 0.02f
     }
 
     private val env = OrtEnvironment.getEnvironment()
@@ -90,31 +45,28 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
     private var recSession: OrtSession? = null
     private val labelList = mutableListOf<String>()
 
-    // 多角形検出モードで正向き・逆向きを並列推論するスレッドプール
-    private val recPool = Executors.newFixedThreadPool(2)
+    // 4方向認識に対応するためスレッド数を4に拡張
+    private val recPool = Executors.newFixedThreadPool(4)
+
+    /** DBNet実行結果：ヒートマップ＋パディング補正情報 */
+    private data class DetOutput(
+        val heatMap: Array<FloatArray>,
+        val padLeft: Int,
+        val padTop: Int,
+        val scale: Float
+    )
 
     init {
         try {
             val numCores = Runtime.getRuntime().availableProcessors().coerceAtMost(4)
-
             fun makeOpts(threads: Int) = OrtSession.SessionOptions().apply {
                 setIntraOpNumThreads(threads)
                 setInterOpNumThreads(2)
-                // NNAPI（NPU/DSP）ハードウェアアクセラレーション
-                // 非対応デバイスは自動でCPUフォールバック
                 try { addNnapi() } catch (_: Exception) {}
             }
-
-            // 検出は単独実行 → 全コアを使う
-            detSession = env.createSession(
-                context.assets.open("det.onnx").readBytes(), makeOpts(numCores))
-
-            // 認識は2スレッドが並列実行する → 各セッションはコア数の半分を使う
-            // （2スレッド × 2並列 = 合計コア数となり最大効率）
+            detSession = env.createSession(context.assets.open("det.onnx").readBytes(), makeOpts(numCores))
             val recThreads = (numCores / 2).coerceAtLeast(2)
-            recSession = env.createSession(
-                context.assets.open("ppocr_rec.onnx").readBytes(), makeOpts(recThreads))
-
+            recSession = env.createSession(context.assets.open("ppocr_rec.onnx").readBytes(), makeOpts(recThreads))
             loadLabels()
         } catch (e: Exception) {
             android.util.Log.e("OcrEngine", "モデル読み込みエラー", e)
@@ -125,44 +77,21 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
     // 公開 API
     // ──────────────────────────────────────────────────────────────────────
 
-    /**
-     * 矩形検出によるOCR。標準的な使い方。
-     *
-     * @param  bitmap 前処理済み画像（ImagePreprocessor.preprocess() の出力）
-     * @return 認識結果リスト（信頼度 CONFIDENCE_THRESHOLD 以上のもの）
-     */
     fun runOcr(bitmap: Bitmap): List<OcrResult> {
         val rawBoxes    = detectText(bitmap)
         val mergedBoxes = mergeRects(rawBoxes)
         val results     = mutableListOf<OcrResult>()
-
         for (box in mergedBoxes) {
             val cropped  = cropBitmap(bitmap, box)
             val enhanced = enhanceContrast(cropped)
             val result   = recognizeBestOrientation(enhanced)
-            if (result.text.isNotEmpty()) results.add(result) // 信頼度フィルタなし・空文字のみ除外
+            if (result.text.isNotEmpty()) results.add(result)
         }
         return results
     }
 
-    /**
-     * 多角形検出によるOCR。斜め文字・歪んだ文字列に対してより高精度。
-     *
-     * BFS連結成分 + PCA最小外接矩形 + 透視変換クロップ + 並列認識。
-     *
-     * @param  bitmap 前処理済み画像（ImagePreprocessor.preprocess() の出力）
-     * @return 認識結果リスト
-     */
-    fun runOcrPolygon(bitmap: Bitmap): List<OcrResult> =
-        runOcrPolygonInternal(bitmap).second
+    fun runOcrPolygon(bitmap: Bitmap): List<OcrResult> = runOcrPolygonInternal(bitmap).second
 
-    /**
-     * 多角形検出OCR + 検出領域をオーバーレイ描画した画像を返す。
-     * ConfirmActivity での視覚確認用。
-     *
-     * @param  bitmap 前処理済み画像
-     * @return Pair<オーバーレイ画像, 認識結果リスト>
-     */
     fun runOcrPolygonWithOverlay(bitmap: Bitmap): Pair<Bitmap, List<OcrResult>> =
         runOcrPolygonInternal(bitmap)
 
@@ -176,54 +105,54 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
         polygons.forEachIndexed { index, poly ->
             val cropped  = perspectiveCrop(bitmap, poly)
             val enhanced = enhanceContrast(cropped)
-            val result   = recognizeBestOrientationParallel(enhanced)
+            val (result, bestAngle) = recognizeBestOrientationParallel(enhanced)
             if (result.text.isEmpty()) return@forEachIndexed
 
-            results.add(result)
+            // 認識に使った角度でクロップ画像を回転（文字が読める向きにする）
+            var displayCrop = if (bestAngle == 0f) cropped else rotateBitmap(cropped, bestAngle)
+            // 目視確認用に横長を強制（縦長のまま残る場合は追加で90°回転）
+            if (displayCrop.height > displayCrop.width) {
+                displayCrop = rotateBitmap(displayCrop, 90f)
+            }
+            val cropPath = saveCropImage(results.size, displayCrop)
+            results.add(result.copy(cropImagePath = cropPath))
 
-            // 検出領域を多角形で描画
             val color = confidenceColor(result.confidence)
             val path  = Path().apply {
                 moveTo(poly[0], poly[1])
                 for (i in 1 until poly.size / 2) lineTo(poly[i * 2], poly[i * 2 + 1])
                 close()
             }
-            // 白縁取り
             canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                this.color = Color.WHITE
-                style = Paint.Style.STROKE
-                strokeWidth = 10f
+                this.color = Color.WHITE; style = Paint.Style.STROKE; strokeWidth = 10f
             })
-            // 色付き枠
             canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                this.color = color
-                style = Paint.Style.STROKE
-                strokeWidth = 6f
-                strokeJoin = Paint.Join.ROUND
+                this.color = color; style = Paint.Style.STROKE
+                strokeWidth = 6f; strokeJoin = Paint.Join.ROUND
             })
-            // 半透明塗りつぶし
             canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                this.color = (color and 0x00FFFFFF) or 0x33000000
-                style = Paint.Style.FILL
+                this.color = (color and 0x00FFFFFF) or 0x33000000; style = Paint.Style.FILL
             })
-            // 番号バッジ
             drawBadge(canvas, index + 1, poly[0], poly[1], color)
         }
         return Pair(overlay, results)
     }
 
-    private fun confidenceColor(confidence: Float): Int {
-        return when {
-            confidence >= 0.6f -> Color.rgb(34, 197, 94)   // 緑
-            confidence >= 0.3f -> Color.rgb(251, 191, 36)  // 黄
-            else               -> Color.rgb(239, 68, 68)   // 赤
-        }
+    /** クロップ画像をキャッシュに保存してパスを返す（UIでの表示用） */
+    private fun saveCropImage(index: Int, bitmap: Bitmap): String? = try {
+        val file = File(context.cacheDir, "ocr_crop_$index.jpg")
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+        file.absolutePath
+    } catch (e: Exception) { null }
+
+    private fun confidenceColor(confidence: Float): Int = when {
+        confidence >= 0.6f -> Color.rgb(34, 197, 94)
+        confidence >= 0.3f -> Color.rgb(251, 191, 36)
+        else               -> Color.rgb(239, 68, 68)
     }
 
     private fun drawBadge(canvas: Canvas, num: Int, x: Float, y: Float, color: Int) {
-        val radius = 24f
-        val cx = x + radius + 4f
-        val cy = y + radius + 4f
+        val radius = 24f; val cx = x + radius + 4f; val cy = y + radius + 4f
         canvas.drawCircle(cx, cy, radius + 3f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
             this.color = Color.WHITE; style = Paint.Style.STROKE; strokeWidth = 4f
         })
@@ -231,15 +160,12 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
             this.color = color; style = Paint.Style.FILL
         })
         val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            this.color = Color.WHITE
-            textSize = 28f
-            isFakeBoldText = true
+            this.color = Color.WHITE; textSize = 28f; isFakeBoldText = true
             textAlign = Paint.Align.CENTER
         }
         canvas.drawText("$num", cx, cy - (tp.descent() + tp.ascent()) / 2f, tp)
     }
 
-    /** リソースを解放する。使い終わったら必ず呼ぶ。 */
     fun close() {
         recPool.shutdown()
         detSession?.close()
@@ -248,39 +174,27 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // 向き推定（逆文字・縦書き対応）
+    // 向き推定
     // ──────────────────────────────────────────────────────────────────────
 
-    /**
-     * 矩形検出用: 正向き・逆向きを試し、LabelMatcherがあれば編集距離優先で選択。
-     * LabelMatcherがない場合は確信度で選択する（フォールバック）。
-     */
     private fun recognizeBestOrientation(bitmap: Bitmap): OcrResult {
         val isVertical  = bitmap.height > bitmap.width * 1.2f
         val firstAngle  = if (isVertical) 90f else 0f
         val firstBitmap = if (firstAngle == 0f) bitmap else rotateBitmap(bitmap, firstAngle)
-
         val first = recognize(firstBitmap)
-
-        // LabelMatcherがある場合：完全一致なら即採用
         val matcher = labelMatcher
         if (matcher != null) {
-            val distA = matcher.findBest(first.text)?.distance ?: Int.MAX_VALUE
-            if (distA == 0) return first
+            if (matcher.findBest(first.text)?.distance == 0) return first
         } else {
             if (first.confidence >= RETRY_THRESHOLD) return first
         }
-
         val second = recognize(rotateBitmap(bitmap, firstAngle + 180f))
-
         return if (matcher != null) {
             val distA = matcher.findBest(first.text)?.distance ?: Int.MAX_VALUE
             val distB = matcher.findBest(second.text)?.distance ?: Int.MAX_VALUE
             when {
-                distA < distB -> first
-                distB < distA -> second
-                first.confidence >= second.confidence -> first
-                else -> second
+                distA < distB -> first; distB < distA -> second
+                first.confidence >= second.confidence -> first; else -> second
             }
         } else {
             if (second.confidence > first.confidence) second else first
@@ -288,45 +202,37 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
     }
 
     /**
-     * 多角形検出用: 正向き・逆向きを並列推論し、
-     * LabelMatcherがあれば編集距離優先で選択、なければ確信度優先。
-     * OrtSession.run() はスレッドセーフ（ONNX Runtime 1.8+）。
+     * 多角形検出用: アスペクト比に応じて認識方向を決定。
+     *   ratio > 2.0 (明確な横長) → 0°/180° の2方向
+     *   ratio < 0.5 (明確な縦長) → 90°/270° の2方向
+     *   それ以外 (曖昧)          → 0°/90°/180°/270° の4方向すべて試す
+     * 各方向を並列推論し、LabelMatcherがあれば編集距離優先、なければ確信度優先で選択。
+     * @return Pair<最良認識結果, 最良角度(度)>  ← 角度はクロップ画像の表示回転に使用
      */
-    private fun recognizeBestOrientationParallel(bitmap: Bitmap): OcrResult {
-        val isVertical = bitmap.height > bitmap.width * 1.2f
-        val angleA     = if (isVertical) 90f else 0f
-        val angleB     = angleA + 180f
-        val bitmapA    = if (angleA == 0f) bitmap else rotateBitmap(bitmap, angleA)
-        val bitmapB    = rotateBitmap(bitmap, angleB)
-
-        val futureA: Future<OcrResult> = recPool.submit<OcrResult> { recognize(bitmapA) }
-        val futureB: Future<OcrResult> = recPool.submit<OcrResult> { recognize(bitmapB) }
-
-        val resultA = futureA.get()
-        val matcher = labelMatcher
-
-        if (matcher != null) {
-            val distA = matcher.findBest(resultA.text)?.distance ?: Int.MAX_VALUE
-            if (distA == 0) {
-                futureB.get()
-                return resultA
-            }
-            val resultB = futureB.get()
-            val distB = matcher.findBest(resultB.text)?.distance ?: Int.MAX_VALUE
-            return when {
-                distA < distB -> resultA
-                distB < distA -> resultB
-                resultA.confidence >= resultB.confidence -> resultA
-                else -> resultB
-            }
-        } else {
-            if (resultA.confidence >= RETRY_THRESHOLD) {
-                futureB.get()
-                return resultA
-            }
-            val resultB = futureB.get()
-            return if (resultB.confidence > resultA.confidence) resultB else resultA
+    private fun recognizeBestOrientationParallel(bitmap: Bitmap): Pair<OcrResult, Float> {
+        val ratio  = bitmap.width.toFloat() / bitmap.height.coerceAtLeast(1)
+        val angles = when {
+            ratio > 2.0f -> floatArrayOf(0f, 180f)
+            ratio < 0.5f -> floatArrayOf(90f, 270f)
+            else         -> floatArrayOf(0f, 90f, 180f, 270f)
         }
+        // (角度, Future) を対で保持し、後で indexOf による誤照合が起きないよう index で管理する
+        val futures = angles.map { angle ->
+            val bmp = if (angle == 0f) bitmap else rotateBitmap(bitmap, angle)
+            angle to recPool.submit<OcrResult> { recognize(bmp) }
+        }
+        val angleResults: List<Pair<Float, OcrResult>> = futures.map { (angle, f) -> angle to f.get() }
+        val matcher = labelMatcher
+        val best = if (matcher != null) {
+            val bestDist = angleResults.minOf { (_, r) -> matcher.findBest(r.text)?.distance ?: Int.MAX_VALUE }
+            angleResults
+                .filter { (_, r) -> (matcher.findBest(r.text)?.distance ?: Int.MAX_VALUE) == bestDist }
+                .maxByOrNull { (_, r) -> r.confidence }
+                ?: angleResults.maxByOrNull { (_, r) -> r.confidence }!!
+        } else {
+            angleResults.maxByOrNull { (_, r) -> r.confidence }!!
+        }
+        return Pair(best.second, best.first)
     }
 
     private fun rotateBitmap(bitmap: Bitmap, degrees: Float): Bitmap {
@@ -335,30 +241,31 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // コントラスト強化（クロップ後に適用）
+    // コントラスト強化（パーセンタイルクリッピング付きヒストグラムストレッチ）
     // ──────────────────────────────────────────────────────────────────────
 
     /**
-     * 切り出したテキスト領域の輝度を 0〜255 にリニア引き伸ばし（ヒストグラムストレッチ）。
-     * 二値化なしでコントラストを上げ、認識モデルが文字を読みやすくする。
-     * コントラスト差が小さい（錆でほぼ均一）場合は変換をスキップ。
+     * 上下 CONTRAST_CLIP_PERCENT の外れ値（反射光・極端な影）を除外してから
+     * 輝度を 0〜255 にリニア引き伸ばし。
+     * 輝度差が CONTRAST_SKIP_THRESHOLD 未満（錆で均一）の場合はスキップ。
      */
     private fun enhanceContrast(bitmap: Bitmap): Bitmap {
         val w = bitmap.width; val h = bitmap.height
         val pixels = IntArray(w * h)
         bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
 
-        var minL = 255f; var maxL = 0f
-        for (p in pixels) {
-            val lum = Color.red(p) * 0.299f + Color.green(p) * 0.587f + Color.blue(p) * 0.114f
-            if (lum < minL) minL = lum
-            if (lum > maxL) maxL = lum
+        val lums = FloatArray(pixels.size) { i ->
+            Color.red(pixels[i]) * 0.299f + Color.green(pixels[i]) * 0.587f + Color.blue(pixels[i]) * 0.114f
         }
-        val range = maxL - minL
-        if (range < 20f) return bitmap
+        lums.sort()
+        val loIdx = (lums.size * CONTRAST_CLIP_PERCENT).toInt().coerceIn(0, lums.size - 1)
+        val hiIdx = (lums.size * (1f - CONTRAST_CLIP_PERCENT)).toInt().coerceIn(0, lums.size - 1)
+        val lo = lums[loIdx]; val hi = lums[hiIdx]
+        val range = hi - lo
+        if (range < CONTRAST_SKIP_THRESHOLD) return bitmap
 
         val scale = 255f / range
-        val bias  = -minL * scale
+        val bias  = -lo * scale
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val cm = ColorMatrix(floatArrayOf(
             scale, 0f,    0f,    0f, bias,
@@ -376,15 +283,33 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
     // テキスト検出（DBNet ヒートマップ解析）
     // ──────────────────────────────────────────────────────────────────────
 
-    /** DBNetモデルを実行してヒートマップを返す共通メソッド */
-    private fun runDetectionModel(bitmap: Bitmap): Array<FloatArray>? {
+    /**
+     * DBNetモデルを実行。
+     * アスペクト比を保ちながら DET_SIZE に収め、グレー(128)でパディング。
+     * 返り値の DetOutput にパディング量・スケールを含め、座標変換に使用する。
+     */
+    private fun runDetectionModel(bitmap: Bitmap): DetOutput? {
         val session = detSession ?: return null
-        val resized = Bitmap.createScaledBitmap(bitmap, DET_SIZE, DET_SIZE, true)
-        val imgData = FloatBuffer.allocate(1 * 3 * DET_SIZE * DET_SIZE)
 
-        // getPixel()の繰り返しJNI呼び出しを避け、一括取得で高速化
-        val pixels = IntArray(DET_SIZE * DET_SIZE)
-        resized.getPixels(pixels, 0, DET_SIZE, 0, 0, DET_SIZE, DET_SIZE)
+        val scale   = minOf(DET_SIZE.toFloat() / bitmap.width, DET_SIZE.toFloat() / bitmap.height)
+        val scaledW = (bitmap.width  * scale).toInt().coerceAtLeast(1)
+        val scaledH = (bitmap.height * scale).toInt().coerceAtLeast(1)
+        val padLeft = (DET_SIZE - scaledW) / 2
+        val padTop  = (DET_SIZE - scaledH) / 2
+
+        val scaledBitmap = Bitmap.createScaledBitmap(bitmap, scaledW, scaledH, true)
+        val padded = Bitmap.createBitmap(DET_SIZE, DET_SIZE, Bitmap.Config.ARGB_8888)
+        Canvas(padded).apply {
+            drawColor(Color.rgb(128, 128, 128))
+            drawBitmap(scaledBitmap, padLeft.toFloat(), padTop.toFloat(), null)
+        }
+        scaledBitmap.recycle()
+
+        val imgData = FloatBuffer.allocate(1 * 3 * DET_SIZE * DET_SIZE)
+        val pixels  = IntArray(DET_SIZE * DET_SIZE)
+        padded.getPixels(pixels, 0, DET_SIZE, 0, 0, DET_SIZE, DET_SIZE)
+        padded.recycle()
+
         val detScale = 1f / (255f * 0.229f)
         val detBias  = -0.485f / 0.229f
         for (c in 0 until 3) {
@@ -398,19 +323,19 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
         val inputName   = session.inputNames.iterator().next()
         val inputTensor = OnnxTensor.createTensor(env, imgData,
             longArrayOf(1, 3, DET_SIZE.toLong(), DET_SIZE.toLong()))
-        return session.run(Collections.singletonMap(inputName, inputTensor)).use { output ->
+        val heatMap = session.run(Collections.singletonMap(inputName, inputTensor)).use { output ->
             extract2DArray(output[0].value)
-        }
+        } ?: return null
+
+        return DetOutput(heatMap, padLeft, padTop, scale)
     }
 
-    /** 矩形検出（標準モード） */
     private fun detectText(bitmap: Bitmap): List<Rect> {
-        val heatMap   = runDetectionModel(bitmap) ?: return emptyList()
+        val det       = runDetectionModel(bitmap) ?: return emptyList()
+        val heatMap   = det.heatMap
         val threshold = 0.35f; val step = 10
         val visited   = Array(DET_SIZE) { BooleanArray(DET_SIZE) }
         val boxes     = mutableListOf<Rect>()
-        val scaleX    = bitmap.width.toFloat()  / DET_SIZE
-        val scaleY    = bitmap.height.toFloat() / DET_SIZE
 
         for (y in 0 until DET_SIZE step step) {
             for (x in 0 until DET_SIZE step step) {
@@ -427,11 +352,13 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
                             }
                         }
                     }
+                    fun hmX(hx: Int) = ((hx - det.padLeft) / det.scale).toInt()
+                    fun hmY(hy: Int) = ((hy - det.padTop)  / det.scale).toInt()
                     boxes.add(Rect(
-                        (max(0, minX - 10)        * scaleX).toInt(),
-                        (max(0, minY - 5)          * scaleY).toInt(),
-                        (min(DET_SIZE, maxX + 10)  * scaleX).toInt(),
-                        (min(DET_SIZE, maxY + 5)   * scaleY).toInt()
+                        max(0, hmX(minX - 10)),
+                        max(0, hmY(minY - 5)),
+                        min(bitmap.width,  hmX(maxX + 10)),
+                        min(bitmap.height, hmY(maxY + 5))
                     ))
                 }
             }
@@ -443,28 +370,26 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
     // 多角形テキスト検出（BFS + PCA + 透視変換）
     // ──────────────────────────────────────────────────────────────────────
 
-    /** 多角形検出: BFS連結成分 → PCA最小外接矩形 → アンクリップ → 面積フィルタ */
     private fun detectTextPolygon(bitmap: Bitmap): List<FloatArray> {
-        val heatMap = runDetectionModel(bitmap) ?: return emptyList()
-        val scaleX  = bitmap.width.toFloat()  / DET_SIZE
-        val scaleY  = bitmap.height.toFloat() / DET_SIZE
+        val det = runDetectionModel(bitmap) ?: return emptyList()
 
-        return bfsComponents(heatMap, threshold = DET_THRESHOLD, minPx = BFS_MIN_PX)
+        return bfsComponents(det.heatMap, threshold = DET_THRESHOLD, minPx = BFS_MIN_PX)
             .mapNotNull { comp ->
                 val rr = pcaMinRect(comp) ?: return@mapNotNull null
                 val corners = unclipRect(rr, ratio = UNCLIP_RATIO)
-                FloatArray(8) { i -> if (i % 2 == 0) corners[i] * scaleX else corners[i] * scaleY }
+                // ヒートマップ座標 → 元画像座標（パディング・スケールを補正）
+                FloatArray(8) { i ->
+                    if (i % 2 == 0)
+                        ((corners[i] - det.padLeft) / det.scale).coerceIn(0f, bitmap.width.toFloat())
+                    else
+                        ((corners[i] - det.padTop)  / det.scale).coerceIn(0f, bitmap.height.toFloat())
+                }
             }
             .filter { polygonArea(it) > MIN_POLY_AREA }
             .sortedByDescending { polygonArea(it) }
             .take(MAX_REGIONS)
     }
 
-    /**
-     * BFS連結成分検出。
-     * キューをInt（r*W+c）でエンコードしてPairオブジェクト生成によるGC負荷を削減。
-     * シードスキャンをstep=2にして初期走査コストを1/4に削減。
-     */
     private fun bfsComponents(
         map: Array<FloatArray>,
         threshold: Float,
@@ -497,7 +422,6 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
         return result
     }
 
-    /** PCAによる最小外接回転矩形の推定 */
     private fun pcaMinRect(pts: List<Pair<Int, Int>>): RotatedRect? {
         if (pts.size < 3) return null
         val cx = pts.sumOf { it.first }.toDouble()  / pts.size
@@ -529,7 +453,6 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
             (maxX - minX).toFloat(), (maxY - minY).toFloat(), angle)
     }
 
-    /** 回転矩形をアンクリップ（外側に膨張）して4頂点を返す */
     private fun unclipRect(rr: RotatedRect, ratio: Float = 1.5f): FloatArray {
         val cosA = cos(rr.angle.toDouble()).toFloat()
         val sinA = sin(rr.angle.toDouble()).toFloat()
@@ -542,7 +465,6 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
         )
     }
 
-    /** 多角形領域を透視変換してクロップ（Android Matrix.setPolyToPoly 使用） */
     private fun perspectiveCrop(bitmap: Bitmap, srcPts: FloatArray): Bitmap {
         fun dist(i: Int, j: Int) = sqrt(
             (srcPts[i*2] - srcPts[j*2]).pow(2) + (srcPts[i*2+1] - srcPts[j*2+1]).pow(2))
@@ -577,29 +499,22 @@ class OcrEngine(private val context: Context, private val labelMatcher: LabelMat
 
     private fun recognize(bitmap: Bitmap): OcrResult {
         val session = recSession ?: return OcrResult("", 0f)
-
-        // アスペクト比を保ったまま高さ48に正規化（SVTR動的幅対応）
         val targetH = 48
         val aspect  = bitmap.width.toFloat() / bitmap.height.coerceAtLeast(1)
         val targetW = (targetH * aspect).toInt().coerceIn(32, MAX_REC_WIDTH).let { w ->
             if (w % 32 == 0) w else (w / 32 + 1) * 32
         }
-
         val resized = Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
         val imgData = FloatBuffer.allocate(1 * 3 * targetH * targetW)
-
-        // getPixel()の繰り返し呼び出しを避け、一括取得で高速化
-        val pixels = IntArray(targetH * targetW)
+        val pixels  = IntArray(targetH * targetW)
         resized.getPixels(pixels, 0, targetW, 0, 0, targetW, targetH)
         for (c in 0 until 3) {
             val shift = when (c) { 0 -> 16; 1 -> 8; else -> 0 }
             for (i in 0 until targetH * targetW) {
-                // (v - 0.5) / 0.5 = v * 2 - 1
                 imgData.put(((pixels[i] shr shift) and 0xFF) / 127.5f - 1f)
             }
         }
         imgData.rewind()
-
         val inputName   = session.inputNames.iterator().next()
         val inputTensor = OnnxTensor.createTensor(env, imgData,
             longArrayOf(1, 3, targetH.toLong(), targetW.toLong()))

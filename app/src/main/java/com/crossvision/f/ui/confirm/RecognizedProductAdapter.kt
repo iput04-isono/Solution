@@ -1,6 +1,8 @@
 package com.crossvision.f.ui.confirm
 
+import android.graphics.BitmapFactory
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.crossvision.f.databinding.ItemRecognizedProductBinding
@@ -67,6 +69,19 @@ class RecognizedProductAdapter(
             binding.tvRawText.text = if (item.isEdited) "（手動修正済み）" else "認識テキスト: ${item.rawText}"
             binding.cbSelect.isChecked = item.isSelected
 
+            val cropPath = item.cropImagePath
+            if (cropPath != null) {
+                val bmp = BitmapFactory.decodeFile(cropPath)
+                if (bmp != null) {
+                    binding.ivCrop.setImageBitmap(bmp)
+                    binding.ivCrop.visibility = View.VISIBLE
+                } else {
+                    binding.ivCrop.visibility = View.GONE
+                }
+            } else {
+                binding.ivCrop.visibility = View.GONE
+            }
+
             binding.cbSelect.setOnCheckedChangeListener { _, isChecked ->
                 items[position] = items[position].copy(isSelected = isChecked)
                 onSelectionChanged(position, isChecked)
@@ -85,5 +100,6 @@ data class RecognizedItem(
     val productCode: String,
     val rawText: String = "",
     val isSelected: Boolean = true,
-    val isEdited: Boolean = false
+    val isEdited: Boolean = false,
+    val cropImagePath: String? = null
 )
