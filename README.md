@@ -7,27 +7,50 @@
 
 ```mermaid
 flowchart LR
-    AndroidApp[AndroidApp]
-    UILayer[UI]
-    OcrEngine[ONNXOCR]
-    LocalDB[RoomDB]
-    SyncLayer[SyncWorkerAndSyncManager]
-    ApiClient[RetrofitClient]
-    MdnsClient[mDNSDiscovery]
-    FastApiServer[FastAPIServer]
-    AdminUI[AdminDashboard]
-    JsonStore[JsonStorage]
-    MdnsServer[mDNSAdvertisement]
+    subgraph androidSide[AndroidApp]
+        direction TB
+        UiFlow["UI Flow: Login -> Process -> Recognize -> Confirm"]
+        CameraInput["Camera/Gallery Input"]
+        OcrPipeline["OCR Pipeline: Preprocess -> Detect -> Recognize -> Match"]
+        LocalDb["RoomDB: registrations/product_labels/constructions/processes"]
+        SyncWorker["SyncWorker (15min interval)"]
+        SyncManager["SyncManager"]
+        ApiClient["RetrofitClient"]
+        NsdHelper["NsdHelper (mDNS discovery)"]
+    end
 
-    AndroidApp --> UILayer
-    UILayer --> OcrEngine
-    UILayer --> LocalDB
-    LocalDB --> SyncLayer
-    SyncLayer --> ApiClient
-    ApiClient -->|"HTTP API"| FastApiServer
-    MdnsClient -->|"Service Discovery"| MdnsServer
-    FastApiServer --> AdminUI
-    FastApiServer --> JsonStore
+    subgraph networkLayer[LocalNetwork]
+        direction TB
+        MdnsService["mDNS Service: _crossvision._tcp.local."]
+        HttpApi["HTTP API channel"]
+    end
+
+    subgraph serverSide[FastAPIServer]
+        direction TB
+        ApiEndpoints["API Endpoints: registrations/product-labels/constructions/processes/export"]
+        ApiKeyAuth["API Key Auth: X-API-KEY"]
+        JsonStorage["JSON Storage: registrations/product_labels/constructions/processes"]
+        AdminDashboard["Admin Dashboard (/admin)"]
+        CsvExport["CSV Export (/api/export/csv)"]
+        ZeroconfAdvertise["Zeroconf Advertisement"]
+    end
+
+    CameraInput --> OcrPipeline
+    UiFlow --> CameraInput
+    OcrPipeline --> LocalDb
+    LocalDb --> SyncWorker
+    SyncWorker --> SyncManager
+    SyncManager --> ApiClient
+
+    ApiClient -->|"POST/GET sync"| HttpApi
+    HttpApi --> ApiEndpoints
+    ApiEndpoints --> ApiKeyAuth
+    ApiEndpoints --> JsonStorage
+    ApiEndpoints --> CsvExport
+    ApiEndpoints --> AdminDashboard
+
+    NsdHelper -->|"discover"| MdnsService
+    ZeroconfAdvertise -->|"advertise"| MdnsService
 ```
 
 ## リポジトリ構成
