@@ -2,12 +2,18 @@ package com.crossvision.f.ocr
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Typeface
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * PaddleOCR (ONNX) を使用したOCR処理クラス
- * オンデバイスで動作するため、オフライン環境でも使用可能
+ * OcrEngine.runFullOcr() を呼び出し、オーバーレイ描画・クロップ保存・ラベル照合を行う
  */
 class OcrProcessor(private val context: Context) {
 
@@ -17,61 +23,40 @@ class OcrProcessor(private val context: Context) {
 
     /**
      * 画像からテキストを認識する
-     * @param bitmap 撮影画像
-     * @return 認識結果のリスト（製品コード候補情報）
      */
     suspend fun recognizeText(bitmap: Bitmap): List<DomainOcrResult> = withContext(Dispatchers.Default) {
-        // バックグラウンドスレッドで重いモデルを初期化する
-        // LabelMatcherを渡すことで向き選択をラベル距離優先にする
-        if (labelMatcher == null) {
-            labelMatcher = LabelMatcher.create(context)
-        }
-        if (engine == null) {
-            engine = OcrEngine(context, labelMatcher!!)
-        }
+        if (labelMatcher == null) labelMatcher = LabelMatcher.create(context)
+        if (engine == null) engine = OcrEngine(context)
 
         val processedImage = preprocessor.preprocess(bitmap)
-        // 多角形検出(runOcrPolygon)または標準矩形検出(runOcr)を選択。
-        // パイプや鉄骨など斜めの文字に強い多角形検出をデフォルト使用。
-        val rawResults = engine!!.runOcrPolygon(processedImage)
-        
-        val ocrResults = mutableListOf<DomainOcrResult>()
+        val output = engine!!.runFullOcr(processedImage)
 
-        for (res in rawResults) {
-            val text = res.text.trim()
-            if (text.isEmpty()) continue
+        output.items.mapNotNull { item ->
+            val text = item.result.text.trim()
+            if (text.isEmpty()) return@mapNotNull null
 
             val cleanedCode = ProductCodeValidator.cleanProductCode(text)
             val validation = ProductCodeValidator.validate(cleanedCode)
-
             val match = labelMatcher!!.findBest(cleanedCode)
             val topCandidates = labelMatcher!!.findTopCandidates(cleanedCode, maxResults = 3)
 
-            // ラベル距離 > 3（正解ラベルに近い候補なし）は除外
-            if (match == null) continue
+            if (match == null) return@mapNotNull null
 
-            ocrResults.add(
-                DomainOcrResult(
-                    rawText = text,
-                    cleanedCode = cleanedCode,
-                    confidence = res.confidence,
-                    isValid = validation.isValid,
-                    matchedLabel = match.label,
-                    matchDistance = match.distance,
-                    isExactMatch = match.isExactMatch,
-                    labelCandidates = topCandidates.map { it.label }
-                )
+            DomainOcrResult(
+                rawText = text,
+                cleanedCode = cleanedCode,
+                confidence = item.result.confidence,
+                isValid = validation.isValid,
+                matchedLabel = match.label,
+                matchDistance = match.distance,
+                isExactMatch = match.isExactMatch,
+                labelCandidates = topCandidates.map { it.label }
             )
         }
-        ocrResults
     }
 
     /**
      * 複数製品の一括認識
-     * 最大5本までの製品コードを一括で認識する
-     * @param bitmap 撮影画像
-     * @param maxResults 最大認識数（デフォルト5）
-     * @return 認識結果のリスト
      */
     suspend fun recognizeMultipleProducts(
         bitmap: Bitmap,
@@ -88,39 +73,111 @@ class OcrProcessor(private val context: Context) {
      */
     suspend fun recognizeWithOverlay(bitmap: Bitmap): Pair<Bitmap, List<DomainOcrResult>> =
         withContext(Dispatchers.Default) {
-            if (labelMatcher == null) {
-                labelMatcher = LabelMatcher.create(context)
-            }
-            if (engine == null) engine = OcrEngine(context, labelMatcher!!)
+            if (labelMatcher == null) labelMatcher = LabelMatcher.create(context)
+            if (engine == null) engine = OcrEngine(context)
 
             val processedImage = preprocessor.preprocess(bitmap)
-            val (overlayBitmap, rawResults) = engine!!.runOcrPolygonWithOverlay(processedImage)
+            val output = engine!!.runFullOcr(processedImage)
 
-            val domainResults = rawResults.mapNotNull { res ->
-                val text = res.text.trim()
-                if (text.isEmpty()) return@mapNotNull null
+            // 検出ポリゴンをオリジナル画像上に描画
+            val overlayBitmap = buildOverlay(processedImage, output.items)
+
+            val domainResults = output.items.mapIndexedNotNull { idx, item ->
+                val text = item.result.text.trim()
+                if (text.isEmpty()) return@mapIndexedNotNull null
+
                 val cleanedCode   = ProductCodeValidator.cleanProductCode(text)
                 val validation    = ProductCodeValidator.validate(cleanedCode)
                 val match         = labelMatcher!!.findBest(cleanedCode)
                 val topCandidates = labelMatcher!!.findTopCandidates(cleanedCode, maxResults = 3)
+                // 認識に使用したビットマップ（向き補正済み）をクロップ画像として保存
+                val cropPath = saveCropImage(idx, item.recognitionBitmap)
+
                 DomainOcrResult(
                     rawText         = text,
                     cleanedCode     = cleanedCode,
-                    confidence      = res.confidence,
+                    confidence      = item.result.confidence,
                     isValid         = validation.isValid,
-                    matchedLabel    = match?.label,          // null = 距離 > 3
+                    matchedLabel    = match?.label,
                     matchDistance   = match?.distance ?: Int.MAX_VALUE,
                     isExactMatch    = match?.isExactMatch ?: false,
                     labelCandidates = topCandidates.map { it.label },
-                    cropImagePath   = res.cropImagePath
+                    cropImagePath   = cropPath
                 )
             }
             Pair(overlayBitmap, domainResults)
         }
 
-    /**
-     * リソースの解放
-     */
+    /** 検出ポリゴンと番号バッジを元画像上に描画してオーバーレイ画像を返す */
+    private fun buildOverlay(bitmap: Bitmap, items: List<OcrEngine.OcrDetectionItem>): Bitmap {
+        val overlay = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+        val canvas = Canvas(overlay)
+
+        items.forEachIndexed { idx, item ->
+            val poly = item.polygon
+            val conf = item.result.confidence
+            val color = when {
+                conf >= 0.6f -> Color.rgb(34, 197, 94)   // 緑: 高信頼度
+                conf >= 0.3f -> Color.rgb(251, 191, 36)  // 黄: 中信頼度
+                else         -> Color.rgb(239, 68, 68)   // 赤: 低信頼度
+            }
+
+            val path = Path().apply {
+                moveTo(poly[0], poly[1])
+                for (i in 1 until poly.size / 2) lineTo(poly[i * 2], poly[i * 2 + 1])
+                close()
+            }
+
+            // 白い縁（視認性向上）
+            canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = Color.WHITE
+                style = Paint.Style.STROKE
+                strokeWidth = 10f
+            })
+            // 信頼度カラーの縁
+            canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = color
+                style = Paint.Style.STROKE
+                strokeWidth = 6f
+                strokeJoin = Paint.Join.ROUND
+            })
+            // 半透明塗り
+            canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = (color and 0x00FFFFFF) or 0x33000000
+                style = Paint.Style.FILL
+            })
+
+            drawBadge(canvas, idx + 1, poly[0], poly[1], color)
+        }
+        return overlay
+    }
+
+    /** 番号バッジ（丸＋数字）を描画する */
+    private fun drawBadge(canvas: Canvas, num: Int, x: Float, y: Float, color: Int) {
+        val r = 22f
+        canvas.drawCircle(x, y, r, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+        })
+        canvas.drawText(
+            num.toString(), x, y + 8f,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = Color.WHITE
+                textSize = 22f
+                textAlign = Paint.Align.CENTER
+                typeface = Typeface.DEFAULT_BOLD
+            }
+        )
+    }
+
+    /** 認識済みクロップ画像をキャッシュに保存してパスを返す */
+    private fun saveCropImage(index: Int, bitmap: Bitmap): String? = try {
+        val file = File(context.cacheDir, "ocr_crop_$index.jpg")
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+        file.absolutePath
+    } catch (e: Exception) {
+        null
+    }
+
     fun close() {
         engine?.close()
         engine = null

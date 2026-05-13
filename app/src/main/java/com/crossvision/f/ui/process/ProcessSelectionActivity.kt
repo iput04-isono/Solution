@@ -168,6 +168,9 @@ class ProcessSelectionActivity : AppCompatActivity() {
                 processes.map { it.name }
             )
             binding.actvProcess.setAdapter(adapter)
+            // setAdapter() が TextInputLayout の有効状態をリセットする場合があるため
+            // 工事が選択済みであれば setAdapter 後に改めて有効化する
+            setProcessEnabled(viewModel.selectedConstruction.value != null)
         }
 
         // 「次へ」ボタンの有効/無効

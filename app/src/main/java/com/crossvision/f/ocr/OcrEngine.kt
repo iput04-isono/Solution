@@ -2,598 +2,947 @@ package com.crossvision.f.ocr
 
 import android.content.Context
 import android.graphics.*
+import android.os.SystemClock
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
-import java.io.File
 import java.nio.FloatBuffer
-import java.util.*
-import java.util.concurrent.Executors
+import java.util.ArrayDeque
+import java.util.Collections
 import kotlin.math.*
 
-/**
- * PaddleOCR（ONNX Runtime）による文字認識エンジン。
- *
- * 改善点（prototype_Ver2.0 からの変更）:
- *   - コントラスト強化: スキップ閾値 20f→5f、パーセンタイルクリッピング追加
- *   - DBNet入力: 縦横比保持＋グレーパディング（アスペクト比が崩れない）
- *   - 向き認識: 曖昧なアスペクト比のとき4方向すべて試す
- *   - クロップ画像をキャッシュに保存し結果に添付（UI表示用）
- */
-class OcrEngine(private val context: Context, private val labelMatcher: LabelMatcher? = null) {
+class OcrEngine(private val context: Context) {
 
     companion object {
-        private const val CONFIDENCE_THRESHOLD = 0.15f
-        private const val RETRY_THRESHOLD = 0.30f
         private const val DET_SIZE = 640
-        private const val DET_THRESHOLD = 0.28f
-        private const val BFS_MIN_PX = 25
-        private const val MIN_POLY_AREA = 100f
-        private const val UNCLIP_RATIO = 2.0f
-        private const val MAX_REGIONS = 12
+        private const val MAX_POLYGON_REGIONS = 24
         private const val MAX_REC_WIDTH = 640
-
-        // スキップ閾値: 20f → 5f（錆で輝度差が小さい場合もコントラスト処理する）
-        private const val CONTRAST_SKIP_THRESHOLD = 5f
-        // パーセンタイルクリッピング: 上下2%の外れ値を除外してからストレッチ
-        // 反射光1点があっても stretch が台無しにならない
-        private const val CONTRAST_CLIP_PERCENT = 0.02f
+        private const val REC_HEIGHT = 48
     }
 
-    private val env = OrtEnvironment.getEnvironment()
+    data class OcrOutput(
+        val originalBitmap: Bitmap,
+        val items: List<OcrDetectionItem>,
+        val timing: OcrTiming
+    )
+
+    data class OcrTiming(
+        val totalMs: Long,
+        val detectionMs: Long,
+        val detectionPreprocessMs: Long,
+        val detectionModelAndPostprocessMs: Long,
+        val normalRecognitionMs: Long,
+        val rotatedRecognitionMs: Long,
+        val cropMs: Long,
+        val cropCheckMs: Long,
+        val orientationPrepMs: Long,
+        val resultFilterMs: Long,
+        val otherMs: Long,
+        val normalRecognitionCount: Int,
+        val rotatedRecognitionCount: Int
+    )
+
+    data class OcrDetectionItem(
+        val index: Int,
+        val rect: Rect?,
+        val polygon: FloatArray,
+        val displayBitmap: Bitmap,
+        val recognitionBitmap: Bitmap,
+        val result: OcrResult
+    )
+
+    private data class RotatedRect(
+        val cx: Float,
+        val cy: Float,
+        val w: Float,
+        val h: Float,
+        val angle: Float
+    )
+
+    private val env: OrtEnvironment = OrtEnvironment.getEnvironment()
     private var detSession: OrtSession? = null
     private var recSession: OrtSession? = null
     private val labelList = mutableListOf<String>()
 
-    // 4方向認識に対応するためスレッド数を4に拡張
-    private val recPool = Executors.newFixedThreadPool(4)
-
-    /** DBNet実行結果：ヒートマップ＋パディング補正情報 */
-    private data class DetOutput(
-        val heatMap: Array<FloatArray>,
-        val padLeft: Int,
-        val padTop: Int,
-        val scale: Float
-    )
-
     init {
-        try {
-            val numCores = Runtime.getRuntime().availableProcessors().coerceAtMost(4)
-            fun makeOpts(threads: Int) = OrtSession.SessionOptions().apply {
+        val cores = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
+
+        fun sessionOptions(threads: Int): OrtSession.SessionOptions {
+            return OrtSession.SessionOptions().apply {
                 setIntraOpNumThreads(threads)
-                setInterOpNumThreads(2)
-                try { addNnapi() } catch (_: Exception) {}
+                setInterOpNumThreads(1)
+                try {
+                    addNnapi()
+                } catch (_: Exception) {
+                }
             }
-            detSession = env.createSession(context.assets.open("det.onnx").readBytes(), makeOpts(numCores))
-            val recThreads = (numCores / 2).coerceAtLeast(2)
-            recSession = env.createSession(context.assets.open("ppocr_rec.onnx").readBytes(), makeOpts(recThreads))
-            loadLabels()
-        } catch (e: Exception) {
-            android.util.Log.e("OcrEngine", "モデル読み込みエラー", e)
         }
+
+        detSession = env.createSession(
+            context.assets.open("det.onnx").use { it.readBytes() },
+            sessionOptions(cores)
+        )
+
+        recSession = env.createSession(
+            context.assets.open("ppocr_rec.onnx").use { it.readBytes() },
+            sessionOptions((cores / 2).coerceAtLeast(1))
+        )
+
+        loadLabels()
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // 公開 API
-    // ──────────────────────────────────────────────────────────────────────
+    fun runFullOcr(originalBitmap: Bitmap): OcrOutput {
+        val totalStartMs = SystemClock.elapsedRealtime()
 
-    fun runOcr(bitmap: Bitmap): List<OcrResult> {
-        val rawBoxes    = detectText(bitmap)
-        val mergedBoxes = mergeRects(rawBoxes)
-        val results     = mutableListOf<OcrResult>()
-        for (box in mergedBoxes) {
-            val cropped  = cropBitmap(bitmap, box)
-            val enhanced = enhanceContrast(cropped)
-            val result   = recognizeBestOrientation(enhanced)
-            if (result.text.isNotEmpty()) results.add(result)
-        }
-        return results
-    }
+        var detectionMs = 0L
+        var normalRecognitionMs = 0L
+        var rotatedRecognitionMs = 0L
 
-    fun runOcrPolygon(bitmap: Bitmap): List<OcrResult> = runOcrPolygonInternal(bitmap).second
+        var cropMs = 0L
+        var cropCheckMs = 0L
+        var orientationPrepMs = 0L
+        var resultFilterMs = 0L
 
-    fun runOcrPolygonWithOverlay(bitmap: Bitmap): Pair<Bitmap, List<OcrResult>> =
-        runOcrPolygonInternal(bitmap)
+        var normalRecognitionCount = 0
+        var rotatedRecognitionCount = 0
 
-    private fun runOcrPolygonInternal(bitmap: Bitmap): Pair<Bitmap, List<OcrResult>> {
-        val polygons = detectTextPolygon(bitmap)
-        val results  = mutableListOf<OcrResult>()
+        val detectionStartMs = SystemClock.elapsedRealtime()
 
-        val overlay = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-        val canvas  = Canvas(overlay)
+        val detectionPreprocessStartMs = SystemClock.elapsedRealtime()
+        val detectionInput = createDetectionInputBitmap(originalBitmap)
+        val detectionBitmap = enhanceContrastForDetection(detectionInput)
+        val detectionPreprocessMs = SystemClock.elapsedRealtime() - detectionPreprocessStartMs
 
-        polygons.forEachIndexed { index, poly ->
-            val cropped  = perspectiveCrop(bitmap, poly)
-            val enhanced = enhanceContrast(cropped)
-            val (result, bestAngle) = recognizeBestOrientationParallel(enhanced)
-            if (result.text.isEmpty()) return@forEachIndexed
+        val detectionModelStartMs = SystemClock.elapsedRealtime()
+        val polygons = detectTextPolygons(
+            bitmap = detectionBitmap,
+            outputWidth = originalBitmap.width,
+            outputHeight = originalBitmap.height
+        )
+        val detectionModelAndPostprocessMs = SystemClock.elapsedRealtime() - detectionModelStartMs
 
-            // 認識に使った角度でクロップ画像を回転（文字が読める向きにする）
-            var displayCrop = if (bestAngle == 0f) cropped else rotateBitmap(cropped, bestAngle)
-            // 目視確認用に横長を強制（縦長のまま残る場合は追加で90°回転）
-            if (displayCrop.height > displayCrop.width) {
-                displayCrop = rotateBitmap(displayCrop, 90f)
+        detectionMs += SystemClock.elapsedRealtime() - detectionStartMs
+
+        val items = mutableListOf<OcrDetectionItem>()
+
+        for ((index, polygon) in polygons.withIndex()) {
+            val cropStartMs = SystemClock.elapsedRealtime()
+
+            val expandedPolygon = expandPolygon(
+                polygon = polygon,
+                imageWidth = originalBitmap.width,
+                imageHeight = originalBitmap.height,
+                scale = 1.55f
+            )
+
+            val boundingRect = polygonToBoundingRect(expandedPolygon)
+            val displayCrop = safePerspectiveCrop(originalBitmap, expandedPolygon)
+
+            cropMs += SystemClock.elapsedRealtime() - cropStartMs
+
+            val cropCheckStartMs = SystemClock.elapsedRealtime()
+            val usefulCrop = isUsefulCropForOcr(displayCrop)
+            cropCheckMs += SystemClock.elapsedRealtime() - cropCheckStartMs
+
+            if (!usefulCrop) {
+                continue
             }
-            val cropPath = saveCropImage(results.size, displayCrop)
-            results.add(result.copy(cropImagePath = cropPath))
 
-            val color = confidenceColor(result.confidence)
-            val path  = Path().apply {
-                moveTo(poly[0], poly[1])
-                for (i in 1 until poly.size / 2) lineTo(poly[i * 2], poly[i * 2 + 1])
-                close()
+            val orientationStartMs = SystemClock.elapsedRealtime()
+            val recognitionBase = normalizeToHorizontal(displayCrop)
+            orientationPrepMs += SystemClock.elapsedRealtime() - orientationStartMs
+
+            val recognitionResult = recognizeBestOrientationWithTiming(recognitionBase)
+
+            normalRecognitionMs += recognitionResult.normalRecognitionMs
+            rotatedRecognitionMs += recognitionResult.rotatedRecognitionMs
+            normalRecognitionCount += recognitionResult.normalRecognitionCount
+            rotatedRecognitionCount += recognitionResult.rotatedRecognitionCount
+
+            val recognitionImage = recognitionResult.bitmap
+            val result = recognitionResult.result
+
+            val resultFilterStartMs = SystemClock.elapsedRealtime()
+            val usefulResult = isUsefulOcrResult(result)
+            resultFilterMs += SystemClock.elapsedRealtime() - resultFilterStartMs
+
+            if (usefulResult) {
+                items.add(
+                    OcrDetectionItem(
+                        index = index + 1,
+                        rect = boundingRect,
+                        polygon = expandedPolygon,
+                        displayBitmap = displayCrop,
+                        recognitionBitmap = recognitionImage,
+                        result = result
+                    )
+                )
             }
-            canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                this.color = Color.WHITE; style = Paint.Style.STROKE; strokeWidth = 10f
-            })
-            canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                this.color = color; style = Paint.Style.STROKE
-                strokeWidth = 6f; strokeJoin = Paint.Join.ROUND
-            })
-            canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                this.color = (color and 0x00FFFFFF) or 0x33000000; style = Paint.Style.FILL
-            })
-            drawBadge(canvas, index + 1, poly[0], poly[1], color)
         }
-        return Pair(overlay, results)
+
+        val totalMs = SystemClock.elapsedRealtime() - totalStartMs
+        val otherMs = (
+            totalMs -
+                detectionMs -
+                normalRecognitionMs -
+                rotatedRecognitionMs -
+                cropMs -
+                cropCheckMs -
+                orientationPrepMs -
+                resultFilterMs
+            ).coerceAtLeast(0L)
+
+        return OcrOutput(
+            originalBitmap = originalBitmap,
+            items = items,
+            timing = OcrTiming(
+                totalMs = totalMs,
+                detectionMs = detectionMs,
+                detectionPreprocessMs = detectionPreprocessMs,
+                detectionModelAndPostprocessMs = detectionModelAndPostprocessMs,
+                normalRecognitionMs = normalRecognitionMs,
+                rotatedRecognitionMs = rotatedRecognitionMs,
+                cropMs = cropMs,
+                cropCheckMs = cropCheckMs,
+                orientationPrepMs = orientationPrepMs,
+                resultFilterMs = resultFilterMs,
+                otherMs = otherMs,
+                normalRecognitionCount = normalRecognitionCount,
+                rotatedRecognitionCount = rotatedRecognitionCount
+            )
+        )
     }
 
-    /** クロップ画像をキャッシュに保存してパスを返す（UIでの表示用） */
-    private fun saveCropImage(index: Int, bitmap: Bitmap): String? = try {
-        val file = File(context.cacheDir, "ocr_crop_$index.jpg")
-        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it) }
-        file.absolutePath
-    } catch (e: Exception) { null }
+    private fun loadLabels() {
+        labelList.clear()
+        labelList.add("blank")
 
-    private fun confidenceColor(confidence: Float): Int = when {
-        confidence >= 0.6f -> Color.rgb(34, 197, 94)
-        confidence >= 0.3f -> Color.rgb(251, 191, 36)
-        else               -> Color.rgb(239, 68, 68)
+        context.assets.open("dict.txt")
+            .bufferedReader(Charsets.UTF_8)
+            .useLines { lines ->
+                lines.forEach { line ->
+                    if (line.isNotEmpty()) {
+                        labelList.add(line)
+                    }
+                }
+            }
     }
 
-    private fun drawBadge(canvas: Canvas, num: Int, x: Float, y: Float, color: Int) {
-        val radius = 24f; val cx = x + radius + 4f; val cy = y + radius + 4f
-        canvas.drawCircle(cx, cy, radius + 3f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            this.color = Color.WHITE; style = Paint.Style.STROKE; strokeWidth = 4f
-        })
-        canvas.drawCircle(cx, cy, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            this.color = color; style = Paint.Style.FILL
-        })
-        val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            this.color = Color.WHITE; textSize = 28f; isFakeBoldText = true
-            textAlign = Paint.Align.CENTER
-        }
-        canvas.drawText("$num", cx, cy - (tp.descent() + tp.ascent()) / 2f, tp)
-    }
-
-    fun close() {
-        recPool.shutdown()
-        detSession?.close()
-        recSession?.close()
-        env.close()
-    }
-
-    // ──────────────────────────────────────────────────────────────────────
-    // 向き推定
-    // ──────────────────────────────────────────────────────────────────────
-
-    private fun recognizeBestOrientation(bitmap: Bitmap): OcrResult {
-        val isVertical  = bitmap.height > bitmap.width * 1.2f
-        val firstAngle  = if (isVertical) 90f else 0f
-        val firstBitmap = if (firstAngle == 0f) bitmap else rotateBitmap(bitmap, firstAngle)
-        val first = recognize(firstBitmap)
-        val matcher = labelMatcher
-        if (matcher != null) {
-            if (matcher.findBest(first.text)?.distance == 0) return first
+    private fun createDetectionInputBitmap(bitmap: Bitmap): Bitmap {
+        return if (bitmap.width == DET_SIZE && bitmap.height == DET_SIZE) {
+            bitmap
         } else {
-            if (first.confidence >= RETRY_THRESHOLD) return first
-        }
-        val second = recognize(rotateBitmap(bitmap, firstAngle + 180f))
-        return if (matcher != null) {
-            val distA = matcher.findBest(first.text)?.distance ?: Int.MAX_VALUE
-            val distB = matcher.findBest(second.text)?.distance ?: Int.MAX_VALUE
-            when {
-                distA < distB -> first; distB < distA -> second
-                first.confidence >= second.confidence -> first; else -> second
-            }
-        } else {
-            if (second.confidence > first.confidence) second else first
+            Bitmap.createScaledBitmap(bitmap, DET_SIZE, DET_SIZE, true)
         }
     }
 
-    /**
-     * 多角形検出用: アスペクト比に応じて認識方向を決定。
-     *   ratio > 2.0 (明確な横長) → 0°/180° の2方向
-     *   ratio < 0.5 (明確な縦長) → 90°/270° の2方向
-     *   それ以外 (曖昧)          → 0°/90°/180°/270° の4方向すべて試す
-     * 各方向を並列推論し、LabelMatcherがあれば編集距離優先、なければ確信度優先で選択。
-     * @return Pair<最良認識結果, 最良角度(度)>  ← 角度はクロップ画像の表示回転に使用
-     */
-    private fun recognizeBestOrientationParallel(bitmap: Bitmap): Pair<OcrResult, Float> {
-        val ratio  = bitmap.width.toFloat() / bitmap.height.coerceAtLeast(1)
-        val angles = when {
-            ratio > 2.0f -> floatArrayOf(0f, 180f)
-            ratio < 0.5f -> floatArrayOf(90f, 270f)
-            else         -> floatArrayOf(0f, 90f, 180f, 270f)
-        }
-        // (角度, Future) を対で保持し、後で indexOf による誤照合が起きないよう index で管理する
-        val futures = angles.map { angle ->
-            val bmp = if (angle == 0f) bitmap else rotateBitmap(bitmap, angle)
-            angle to recPool.submit<OcrResult> { recognize(bmp) }
-        }
-        val angleResults: List<Pair<Float, OcrResult>> = futures.map { (angle, f) -> angle to f.get() }
-        val matcher = labelMatcher
-        val best = if (matcher != null) {
-            val bestDist = angleResults.minOf { (_, r) -> matcher.findBest(r.text)?.distance ?: Int.MAX_VALUE }
-            angleResults
-                .filter { (_, r) -> (matcher.findBest(r.text)?.distance ?: Int.MAX_VALUE) == bestDist }
-                .maxByOrNull { (_, r) -> r.confidence }
-                ?: angleResults.maxByOrNull { (_, r) -> r.confidence }!!
-        } else {
-            angleResults.maxByOrNull { (_, r) -> r.confidence }!!
-        }
-        return Pair(best.second, best.first)
-    }
-
-    private fun rotateBitmap(bitmap: Bitmap, degrees: Float): Bitmap {
-        val matrix = Matrix().apply { postRotate(degrees) }
-        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-    }
-
-    // ──────────────────────────────────────────────────────────────────────
-    // コントラスト強化（パーセンタイルクリッピング付きヒストグラムストレッチ）
-    // ──────────────────────────────────────────────────────────────────────
-
-    /**
-     * 上下 CONTRAST_CLIP_PERCENT の外れ値（反射光・極端な影）を除外してから
-     * 輝度を 0〜255 にリニア引き伸ばし。
-     * 輝度差が CONTRAST_SKIP_THRESHOLD 未満（錆で均一）の場合はスキップ。
-     */
-    private fun enhanceContrast(bitmap: Bitmap): Bitmap {
-        val w = bitmap.width; val h = bitmap.height
+    private fun enhanceContrastForDetection(bitmap: Bitmap): Bitmap {
+        val w = bitmap.width
+        val h = bitmap.height
         val pixels = IntArray(w * h)
         bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
 
-        val lums = FloatArray(pixels.size) { i ->
-            Color.red(pixels[i]) * 0.299f + Color.green(pixels[i]) * 0.587f + Color.blue(pixels[i]) * 0.114f
-        }
-        lums.sort()
-        val loIdx = (lums.size * CONTRAST_CLIP_PERCENT).toInt().coerceIn(0, lums.size - 1)
-        val hiIdx = (lums.size * (1f - CONTRAST_CLIP_PERCENT)).toInt().coerceIn(0, lums.size - 1)
-        val lo = lums[loIdx]; val hi = lums[hiIdx]
-        val range = hi - lo
-        if (range < CONTRAST_SKIP_THRESHOLD) return bitmap
+        var minL = 255f
+        var maxL = 0f
 
-        val scale = 255f / range
-        val bias  = -lo * scale
+        for (p in pixels) {
+            val lum = Color.red(p) * 0.299f + Color.green(p) * 0.587f + Color.blue(p) * 0.114f
+            if (lum < minL) minL = lum
+            if (lum > maxL) maxL = lum
+        }
+
+        val range = maxL - minL
+        if (range < 12f) return bitmap
+
+        val scale = (220f / range).coerceAtMost(2.2f)
+        val bias = -minL * scale + 8f
+
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val cm = ColorMatrix(floatArrayOf(
-            scale, 0f,    0f,    0f, bias,
-            0f,    scale, 0f,    0f, bias,
-            0f,    0f,    scale, 0f, bias,
-            0f,    0f,    0f,    1f, 0f
-        ))
-        Canvas(out).drawBitmap(bitmap, 0f, 0f, Paint().apply {
-            colorFilter = ColorMatrixColorFilter(cm)
-        })
+        val cm = ColorMatrix(
+            floatArrayOf(
+                scale, 0f, 0f, 0f, bias,
+                0f, scale, 0f, 0f, bias,
+                0f, 0f, scale, 0f, bias,
+                0f, 0f, 0f, 1f, 0f
+            )
+        )
+
+        Canvas(out).drawBitmap(
+            bitmap,
+            0f,
+            0f,
+            Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                colorFilter = ColorMatrixColorFilter(cm)
+            }
+        )
+
         return out
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // テキスト検出（DBNet ヒートマップ解析）
-    // ──────────────────────────────────────────────────────────────────────
+    private fun detectTextPolygons(
+        bitmap: Bitmap,
+        outputWidth: Int,
+        outputHeight: Int
+    ): List<FloatArray> {
+        val heatMap = runDetectionModel(bitmap) ?: return emptyList()
+        val scaleX = outputWidth.toFloat() / DET_SIZE.toFloat()
+        val scaleY = outputHeight.toFloat() / DET_SIZE.toFloat()
 
-    /**
-     * DBNetモデルを実行。
-     * アスペクト比を保ちながら DET_SIZE に収め、グレー(128)でパディング。
-     * 返り値の DetOutput にパディング量・スケールを含め、座標変換に使用する。
-     */
-    private fun runDetectionModel(bitmap: Bitmap): DetOutput? {
-        val session = detSession ?: return null
-
-        val scale   = minOf(DET_SIZE.toFloat() / bitmap.width, DET_SIZE.toFloat() / bitmap.height)
-        val scaledW = (bitmap.width  * scale).toInt().coerceAtLeast(1)
-        val scaledH = (bitmap.height * scale).toInt().coerceAtLeast(1)
-        val padLeft = (DET_SIZE - scaledW) / 2
-        val padTop  = (DET_SIZE - scaledH) / 2
-
-        val scaledBitmap = Bitmap.createScaledBitmap(bitmap, scaledW, scaledH, true)
-        val padded = Bitmap.createBitmap(DET_SIZE, DET_SIZE, Bitmap.Config.ARGB_8888)
-        Canvas(padded).apply {
-            drawColor(Color.rgb(128, 128, 128))
-            drawBitmap(scaledBitmap, padLeft.toFloat(), padTop.toFloat(), null)
-        }
-        scaledBitmap.recycle()
-
-        val imgData = FloatBuffer.allocate(1 * 3 * DET_SIZE * DET_SIZE)
-        val pixels  = IntArray(DET_SIZE * DET_SIZE)
-        padded.getPixels(pixels, 0, DET_SIZE, 0, 0, DET_SIZE, DET_SIZE)
-        padded.recycle()
-
-        val detScale = 1f / (255f * 0.229f)
-        val detBias  = -0.485f / 0.229f
-        for (c in 0 until 3) {
-            val shift = when (c) { 0 -> 16; 1 -> 8; else -> 0 }
-            for (i in 0 until DET_SIZE * DET_SIZE) {
-                imgData.put(((pixels[i] shr shift) and 0xFF) * detScale + detBias)
-            }
-        }
-        imgData.rewind()
-
-        val inputName   = session.inputNames.iterator().next()
-        val inputTensor = OnnxTensor.createTensor(env, imgData,
-            longArrayOf(1, 3, DET_SIZE.toLong(), DET_SIZE.toLong()))
-        val heatMap = session.run(Collections.singletonMap(inputName, inputTensor)).use { output ->
-            extract2DArray(output[0].value)
-        } ?: return null
-
-        return DetOutput(heatMap, padLeft, padTop, scale)
-    }
-
-    private fun detectText(bitmap: Bitmap): List<Rect> {
-        val det       = runDetectionModel(bitmap) ?: return emptyList()
-        val heatMap   = det.heatMap
-        val threshold = 0.35f; val step = 10
-        val visited   = Array(DET_SIZE) { BooleanArray(DET_SIZE) }
-        val boxes     = mutableListOf<Rect>()
-
-        for (y in 0 until DET_SIZE step step) {
-            for (x in 0 until DET_SIZE step step) {
-                if (heatMap[y][x] > threshold && !visited[y][x]) {
-                    var minX = x; var maxX = x; var minY = y; var maxY = y
-                    for (dy in -20..20 step 5) {
-                        for (dx in -50..50 step 5) {
-                            val ny = y + dy; val nx = x + dx
-                            if (ny in 0 until DET_SIZE && nx in 0 until DET_SIZE
-                                && heatMap[ny][nx] > threshold) {
-                                minX = min(minX, nx); maxX = max(maxX, nx)
-                                minY = min(minY, ny); maxY = max(maxY, ny)
-                                visited[ny][nx] = true
-                            }
-                        }
-                    }
-                    fun hmX(hx: Int) = ((hx - det.padLeft) / det.scale).toInt()
-                    fun hmY(hy: Int) = ((hy - det.padTop)  / det.scale).toInt()
-                    boxes.add(Rect(
-                        max(0, hmX(minX - 10)),
-                        max(0, hmY(minY - 5)),
-                        min(bitmap.width,  hmX(maxX + 10)),
-                        min(bitmap.height, hmY(maxY + 5))
-                    ))
-                }
-            }
-        }
-        return boxes
-    }
-
-    // ──────────────────────────────────────────────────────────────────────
-    // 多角形テキスト検出（BFS + PCA + 透視変換）
-    // ──────────────────────────────────────────────────────────────────────
-
-    private fun detectTextPolygon(bitmap: Bitmap): List<FloatArray> {
-        val det = runDetectionModel(bitmap) ?: return emptyList()
-
-        return bfsComponents(det.heatMap, threshold = DET_THRESHOLD, minPx = BFS_MIN_PX)
+        return bfsComponents(heatMap, threshold = 0.26f, minPx = 24)
             .mapNotNull { comp ->
                 val rr = pcaMinRect(comp) ?: return@mapNotNull null
-                val corners = unclipRect(rr, ratio = UNCLIP_RATIO)
-                // ヒートマップ座標 → 元画像座標（パディング・スケールを補正）
+                val corners = unclipRect(rr, ratio = 1.5f)
                 FloatArray(8) { i ->
-                    if (i % 2 == 0)
-                        ((corners[i] - det.padLeft) / det.scale).coerceIn(0f, bitmap.width.toFloat())
-                    else
-                        ((corners[i] - det.padTop)  / det.scale).coerceIn(0f, bitmap.height.toFloat())
+                    if (i % 2 == 0) corners[i] * scaleX else corners[i] * scaleY
                 }
             }
-            .filter { polygonArea(it) > MIN_POLY_AREA }
+            .filter { polygonArea(it) > 120f }
             .sortedByDescending { polygonArea(it) }
-            .take(MAX_REGIONS)
+            .take(MAX_POLYGON_REGIONS)
+    }
+
+    private fun runDetectionModel(bitmap: Bitmap): Array<FloatArray>? {
+        val session = detSession ?: return null
+
+        val inputBitmap = if (bitmap.width == DET_SIZE && bitmap.height == DET_SIZE) {
+            bitmap
+        } else {
+            Bitmap.createScaledBitmap(bitmap, DET_SIZE, DET_SIZE, true)
+        }
+
+        val pixels = IntArray(DET_SIZE * DET_SIZE)
+        inputBitmap.getPixels(pixels, 0, DET_SIZE, 0, 0, DET_SIZE, DET_SIZE)
+
+        val data = FloatBuffer.allocate(1 * 3 * DET_SIZE * DET_SIZE)
+
+        for (c in 0 until 3) {
+            val shift = when (c) {
+                0 -> 16
+                1 -> 8
+                else -> 0
+            }
+
+            for (p in pixels) {
+                val v = ((p shr shift) and 0xFF) / 255f
+                data.put((v - 0.485f) / 0.229f)
+            }
+        }
+
+        data.rewind()
+
+        val inputName = session.inputNames.first()
+        val tensor = OnnxTensor.createTensor(
+            env,
+            data,
+            longArrayOf(1, 3, DET_SIZE.toLong(), DET_SIZE.toLong())
+        )
+
+        tensor.use { inputTensor ->
+            session.run(Collections.singletonMap(inputName, inputTensor)).use { outputs ->
+                return extract2DArray(outputs[0].value)
+            }
+        }
     }
 
     private fun bfsComponents(
         map: Array<FloatArray>,
         threshold: Float,
-        minPx: Int = 60
+        minPx: Int
     ): List<List<Pair<Int, Int>>> {
-        val H = map.size; val W = map[0].size
-        val visited = Array(H) { BooleanArray(W) }
-        val result  = mutableListOf<List<Pair<Int, Int>>>()
+        if (map.isEmpty() || map[0].isEmpty()) return emptyList()
 
-        for (r in 0 until H step 2) {
-            for (c in 0 until W step 2) {
-                if (map[r][c] > threshold && !visited[r][c]) {
-                    val queue = ArrayDeque<Int>()
-                    val comp  = mutableListOf<Pair<Int, Int>>()
-                    visited[r][c] = true
-                    queue.add(r * W + c)
-                    while (queue.isNotEmpty()) {
-                        val code = queue.removeFirst()
-                        val cr = code / W; val cc = code % W
-                        comp.add(cc to cr)
-                        if (cr > 0     && !visited[cr-1][cc] && map[cr-1][cc] > threshold) { visited[cr-1][cc] = true; queue.add((cr-1)*W+cc) }
-                        if (cr < H - 1 && !visited[cr+1][cc] && map[cr+1][cc] > threshold) { visited[cr+1][cc] = true; queue.add((cr+1)*W+cc) }
-                        if (cc > 0     && !visited[cr][cc-1] && map[cr][cc-1] > threshold) { visited[cr][cc-1] = true; queue.add(cr*W+cc-1) }
-                        if (cc < W - 1 && !visited[cr][cc+1] && map[cr][cc+1] > threshold) { visited[cr][cc+1] = true; queue.add(cr*W+cc+1) }
+        val h = map.size
+        val w = map[0].size
+        val visited = Array(h) { BooleanArray(w) }
+        val result = mutableListOf<List<Pair<Int, Int>>>()
+
+        val dx = intArrayOf(1, -1, 0, 0)
+        val dy = intArrayOf(0, 0, 1, -1)
+
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                if (visited[y][x]) continue
+                if (map[y][x] <= threshold) continue
+
+                val queue: ArrayDeque<Int> = ArrayDeque()
+                val comp = mutableListOf<Pair<Int, Int>>()
+
+                visited[y][x] = true
+                queue.add(y * w + x)
+
+                while (queue.isNotEmpty()) {
+                    val code = queue.removeFirst()
+                    val cy = code / w
+                    val cx = code % w
+
+                    comp.add(cx to cy)
+
+                    for (i in 0..3) {
+                        val nx = cx + dx[i]
+                        val ny = cy + dy[i]
+
+                        if (nx !in 0 until w || ny !in 0 until h) continue
+                        if (visited[ny][nx]) continue
+                        if (map[ny][nx] <= threshold) continue
+
+                        visited[ny][nx] = true
+                        queue.add(ny * w + nx)
                     }
-                    if (comp.size >= minPx) result.add(comp)
+                }
+
+                if (comp.size >= minPx) {
+                    result.add(comp)
                 }
             }
         }
+
         return result
     }
 
-    private fun pcaMinRect(pts: List<Pair<Int, Int>>): RotatedRect? {
-        if (pts.size < 3) return null
-        val cx = pts.sumOf { it.first }.toDouble()  / pts.size
-        val cy = pts.sumOf { it.second }.toDouble() / pts.size
+    private fun pcaMinRect(points: List<Pair<Int, Int>>): RotatedRect? {
+        if (points.size < 3) return null
 
-        var cxx = 0.0; var cxy = 0.0; var cyy = 0.0
-        for ((x, y) in pts) {
-            val dx = x - cx; val dy = y - cy
-            cxx += dx * dx; cxy += dx * dy; cyy += dy * dy
+        val cx = points.sumOf { it.first }.toDouble() / points.size
+        val cy = points.sumOf { it.second }.toDouble() / points.size
+
+        var cxx = 0.0
+        var cxy = 0.0
+        var cyy = 0.0
+
+        for ((x, y) in points) {
+            val dx = x - cx
+            val dy = y - cy
+            cxx += dx * dx
+            cxy += dx * dy
+            cyy += dy * dy
         }
-        val n = pts.size.toDouble()
-        cxx /= n; cxy /= n; cyy /= n
+
+        val n = points.size.toDouble()
+        cxx /= n
+        cxy /= n
+        cyy /= n
 
         val trace = cxx + cyy
-        val disc  = sqrt(max(0.0, trace * trace / 4.0 - (cxx * cyy - cxy * cxy)))
-        val angle = if (abs(cxy) > 1e-10) atan2(cxy, trace / 2.0 + disc - cyy).toFloat()
-                    else if (cxx >= cyy) 0f else (PI / 2).toFloat()
+        val disc = sqrt(max(0.0, trace * trace / 4.0 - (cxx * cyy - cxy * cxy)))
 
-        val cosA = cos(angle.toDouble()); val sinA = sin(angle.toDouble())
-        var minX = Double.MAX_VALUE; var maxX = -Double.MAX_VALUE
-        var minY = Double.MAX_VALUE; var maxY = -Double.MAX_VALUE
-        for ((x, y) in pts) {
-            val dx = x - cx; val dy = y - cy
-            val rx = dx * cosA + dy * sinA; val ry = -dx * sinA + dy * cosA
-            if (rx < minX) minX = rx; if (rx > maxX) maxX = rx
-            if (ry < minY) minY = ry; if (ry > maxY) maxY = ry
+        val angle = if (abs(cxy) > 1e-10) {
+            atan2(cxy, trace / 2.0 + disc - cyy).toFloat()
+        } else {
+            if (cxx >= cyy) 0f else (PI / 2).toFloat()
         }
-        return RotatedRect(cx.toFloat(), cy.toFloat(),
-            (maxX - minX).toFloat(), (maxY - minY).toFloat(), angle)
-    }
 
-    private fun unclipRect(rr: RotatedRect, ratio: Float = 1.5f): FloatArray {
-        val cosA = cos(rr.angle.toDouble()).toFloat()
-        val sinA = sin(rr.angle.toDouble()).toFloat()
-        val hw   = rr.w / 2 * sqrt(ratio); val hh = rr.h / 2 * sqrt(ratio)
-        return floatArrayOf(
-            rr.cx + (-hw) * cosA - (-hh) * sinA, rr.cy + (-hw) * sinA + (-hh) * cosA,
-            rr.cx +   hw  * cosA - (-hh) * sinA, rr.cy +   hw  * sinA + (-hh) * cosA,
-            rr.cx +   hw  * cosA -   hh  * sinA, rr.cy +   hw  * sinA +   hh  * cosA,
-            rr.cx + (-hw) * cosA -   hh  * sinA, rr.cy + (-hw) * sinA +   hh  * cosA
+        val cosA = cos(angle.toDouble())
+        val sinA = sin(angle.toDouble())
+
+        var minX = Double.MAX_VALUE
+        var maxX = -Double.MAX_VALUE
+        var minY = Double.MAX_VALUE
+        var maxY = -Double.MAX_VALUE
+
+        for ((x, y) in points) {
+            val dx = x - cx
+            val dy = y - cy
+
+            val rx = dx * cosA + dy * sinA
+            val ry = -dx * sinA + dy * cosA
+
+            if (rx < minX) minX = rx
+            if (rx > maxX) maxX = rx
+            if (ry < minY) minY = ry
+            if (ry > maxY) maxY = ry
+        }
+
+        return RotatedRect(
+            cx = cx.toFloat(),
+            cy = cy.toFloat(),
+            w = (maxX - minX).toFloat().coerceAtLeast(1f),
+            h = (maxY - minY).toFloat().coerceAtLeast(1f),
+            angle = angle
         )
     }
 
-    private fun perspectiveCrop(bitmap: Bitmap, srcPts: FloatArray): Bitmap {
-        fun dist(i: Int, j: Int) = sqrt(
-            (srcPts[i*2] - srcPts[j*2]).pow(2) + (srcPts[i*2+1] - srcPts[j*2+1]).pow(2))
-        val tw = ((dist(0,1) + dist(3,2)) / 2).toInt().coerceIn(1, 2000)
-        val th = ((dist(1,2) + dist(0,3)) / 2).toInt().coerceIn(1, 2000)
-        val dstPts = floatArrayOf(0f, 0f, tw.toFloat(), 0f, tw.toFloat(), th.toFloat(), 0f, th.toFloat())
-        val matrix = Matrix()
-        matrix.setPolyToPoly(srcPts, 0, dstPts, 0, 4)
-        val out = Bitmap.createBitmap(tw, th, Bitmap.Config.ARGB_8888)
-        Canvas(out).drawBitmap(bitmap, matrix, Paint(Paint.ANTI_ALIAS_FLAG))
+    private fun unclipRect(rr: RotatedRect, ratio: Float): FloatArray {
+        val cosA = cos(rr.angle.toDouble()).toFloat()
+        val sinA = sin(rr.angle.toDouble()).toFloat()
+
+        val hw = rr.w / 2f * sqrt(ratio)
+        val hh = rr.h / 2f * sqrt(ratio)
+
+        return floatArrayOf(
+            rr.cx + (-hw) * cosA - (-hh) * sinA,
+            rr.cy + (-hw) * sinA + (-hh) * cosA,
+            rr.cx + (hw) * cosA - (-hh) * sinA,
+            rr.cy + (hw) * sinA + (-hh) * cosA,
+            rr.cx + (hw) * cosA - (hh) * sinA,
+            rr.cy + (hw) * sinA + (hh) * cosA,
+            rr.cx + (-hw) * cosA - (hh) * sinA,
+            rr.cy + (-hw) * sinA + (hh) * cosA
+        )
+    }
+
+    private fun expandPolygon(
+        polygon: FloatArray,
+        imageWidth: Int,
+        imageHeight: Int,
+        scale: Float
+    ): FloatArray {
+        if (polygon.size < 8) return polygon
+
+        var cx = 0f
+        var cy = 0f
+        val count = polygon.size / 2
+
+        for (i in 0 until count) {
+            cx += polygon[i * 2]
+            cy += polygon[i * 2 + 1]
+        }
+
+        cx /= count
+        cy /= count
+
+        val out = FloatArray(polygon.size)
+
+        for (i in 0 until count) {
+            val x = polygon[i * 2]
+            val y = polygon[i * 2 + 1]
+
+            out[i * 2] = (cx + (x - cx) * scale).coerceIn(0f, imageWidth.toFloat())
+            out[i * 2 + 1] = (cy + (y - cy) * scale).coerceIn(0f, imageHeight.toFloat())
+        }
+
         return out
     }
 
-    private fun polygonArea(pts: FloatArray): Float {
-        var area = 0f; val n = pts.size / 2
+    private fun polygonToBoundingRect(polygon: FloatArray): Rect {
+        var minX = Float.MAX_VALUE
+        var minY = Float.MAX_VALUE
+        var maxX = -Float.MAX_VALUE
+        var maxY = -Float.MAX_VALUE
+
+        for (i in polygon.indices step 2) {
+            val x = polygon[i]
+            val y = polygon[i + 1]
+
+            if (x < minX) minX = x
+            if (y < minY) minY = y
+            if (x > maxX) maxX = x
+            if (y > maxY) maxY = y
+        }
+
+        return Rect(
+            floor(minX).toInt(),
+            floor(minY).toInt(),
+            ceil(maxX).toInt(),
+            ceil(maxY).toInt()
+        )
+    }
+
+    private fun polygonArea(points: FloatArray): Float {
+        val n = points.size / 2
+        if (n < 3) return 0f
+
+        var area = 0f
+
         for (i in 0 until n) {
             val j = (i + 1) % n
-            area += pts[i * 2] * pts[j * 2 + 1] - pts[j * 2] * pts[i * 2 + 1]
+            area += points[i * 2] * points[j * 2 + 1] - points[j * 2] * points[i * 2 + 1]
         }
+
         return abs(area) / 2f
     }
 
-    private data class RotatedRect(
-        val cx: Float, val cy: Float,
-        val w: Float,  val h: Float,
-        val angle: Float
-    )
+    private fun cropBitmap(bitmap: Bitmap, rect: Rect): Bitmap {
+        val left = rect.left.coerceIn(0, bitmap.width - 1)
+        val top = rect.top.coerceIn(0, bitmap.height - 1)
+        val right = rect.right.coerceIn(left + 1, bitmap.width)
+        val bottom = rect.bottom.coerceIn(top + 1, bitmap.height)
 
-    // ──────────────────────────────────────────────────────────────────────
-    // テキスト認識（ppocr_rec.onnx）
-    // ──────────────────────────────────────────────────────────────────────
+        return Bitmap.createBitmap(bitmap, left, top, right - left, bottom - top)
+    }
 
-    private fun recognize(bitmap: Bitmap): OcrResult {
-        val session = recSession ?: return OcrResult("", 0f)
-        val targetH = 48
-        val aspect  = bitmap.width.toFloat() / bitmap.height.coerceAtLeast(1)
-        val targetW = (targetH * aspect).toInt().coerceIn(32, MAX_REC_WIDTH).let { w ->
-            if (w % 32 == 0) w else (w / 32 + 1) * 32
+    private fun normalizeToHorizontal(bitmap: Bitmap): Bitmap {
+        return if (bitmap.height > bitmap.width * 1.2f) {
+            rotateBitmap(bitmap, 90f)
+        } else {
+            bitmap
         }
-        val resized = Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
-        val imgData = FloatBuffer.allocate(1 * 3 * targetH * targetW)
-        val pixels  = IntArray(targetH * targetW)
-        resized.getPixels(pixels, 0, targetW, 0, 0, targetW, targetH)
-        for (c in 0 until 3) {
-            val shift = when (c) { 0 -> 16; 1 -> 8; else -> 0 }
-            for (i in 0 until targetH * targetW) {
-                imgData.put(((pixels[i] shr shift) and 0xFF) / 127.5f - 1f)
+    }
+
+    private fun isUsefulCropForOcr(bitmap: Bitmap): Boolean {
+        if (bitmap.width < 8 || bitmap.height < 8) return false
+
+        val maxSide = 128
+        val longSide = max(bitmap.width, bitmap.height)
+
+        val checkBitmap = if (longSide > maxSide) {
+            val scale = maxSide.toFloat() / longSide.toFloat()
+            val newW = (bitmap.width * scale).toInt().coerceAtLeast(1)
+            val newH = (bitmap.height * scale).toInt().coerceAtLeast(1)
+            Bitmap.createScaledBitmap(bitmap, newW, newH, true)
+        } else {
+            bitmap
+        }
+
+        val w = checkBitmap.width
+        val h = checkBitmap.height
+        val pixels = IntArray(w * h)
+        checkBitmap.getPixels(pixels, 0, w, 0, 0, w, h)
+
+        var coloredCount = 0
+        var darkCount = 0
+        var brightCount = 0
+        var edgeLikeCount = 0
+
+        var minLum = 255f
+        var maxLum = 0f
+
+        for (p in pixels) {
+            val r = Color.red(p)
+            val g = Color.green(p)
+            val b = Color.blue(p)
+
+            val lum = r * 0.299f + g * 0.587f + b * 0.114f
+
+            if (lum < minLum) minLum = lum
+            if (lum > maxLum) maxLum = lum
+
+            if (lum < 80f) darkCount++
+            if (lum > 175f) brightCount++
+
+            val maxRgb = max(r, max(g, b))
+            val minRgb = min(r, min(g, b))
+            val saturationApprox = if (maxRgb == 0) {
+                0f
+            } else {
+                (maxRgb - minRgb).toFloat() / maxRgb.toFloat()
+            }
+            val valueApprox = maxRgb / 255f
+
+            if (saturationApprox > 0.18f && valueApprox > 0.16f) {
+                coloredCount++
+            }
+
+            if (lum < 110f) {
+                edgeLikeCount++
             }
         }
-        imgData.rewind()
-        val inputName   = session.inputNames.iterator().next()
-        val inputTensor = OnnxTensor.createTensor(env, imgData,
-            longArrayOf(1, 3, targetH.toLong(), targetW.toLong()))
-        return session.run(Collections.singletonMap(inputName, inputTensor)).use { results ->
-            val output = extract2DArray(results[0].value) ?: return OcrResult("", 0f)
-            decode(output)
+
+        val total = pixels.size.coerceAtLeast(1)
+        val coloredRatio = coloredCount.toFloat() / total.toFloat()
+        val edgeRatio = edgeLikeCount.toFloat() / total.toFloat()
+        val contrast = maxLum - minLum
+        val brightRatio = brightCount.toFloat() / total.toFloat()
+        val darkRatio = darkCount.toFloat() / total.toFloat()
+
+        if (brightRatio > 0.96f && darkRatio < 0.002f && coloredRatio < 0.002f && contrast < 35f) {
+            return false
+        }
+
+        if (coloredRatio < 0.002f && edgeRatio < 0.003f && contrast < 45f) {
+            return false
+        }
+
+        if (coloredCount < 2 && edgeLikeCount < 3 && contrast < 35f) {
+            return false
+        }
+
+        return true
+    }
+
+    private fun isUsefulOcrResult(result: OcrResult): Boolean {
+        val text = result.text.trim()
+        if (text.isEmpty()) return false
+
+        val upper = text.uppercase()
+        if (upper == "EMPTY") return false
+        if (upper == "FORMATERR") return false
+        if (upper == "ERROR") return false
+
+        val usefulCount = text.count { it.isLetterOrDigit() || it == '-' || it == '/' }
+        if (usefulCount == 0) return false
+
+        val usefulRatio = usefulCount.toFloat() / text.length.coerceAtLeast(1).toFloat()
+        if (usefulRatio < 0.45f) return false
+
+        if (usefulCount <= 2 && result.confidence < 0.60f) return false
+
+        return true
+    }
+
+    private data class RecognitionTimingResult(
+        val bitmap: Bitmap,
+        val result: OcrResult,
+        val normalRecognitionMs: Long,
+        val rotatedRecognitionMs: Long,
+        val normalRecognitionCount: Int,
+        val rotatedRecognitionCount: Int
+    )
+
+    private fun recognizeBestOrientationWithTiming(bitmap: Bitmap): RecognitionTimingResult {
+        val normalStartMs = SystemClock.elapsedRealtime()
+        val normalResult = recognize(bitmap)
+        val normalMs = SystemClock.elapsedRealtime() - normalStartMs
+
+        if (isConfidentNormalResult(normalResult)) {
+            return RecognitionTimingResult(
+                bitmap = bitmap,
+                result = normalResult,
+                normalRecognitionMs = normalMs,
+                rotatedRecognitionMs = 0L,
+                normalRecognitionCount = 1,
+                rotatedRecognitionCount = 0
+            )
+        }
+
+        val rotatedBitmap = rotateBitmap(bitmap, 180f)
+
+        val rotatedStartMs = SystemClock.elapsedRealtime()
+        val rotatedResult = recognize(rotatedBitmap)
+        val rotatedMs = SystemClock.elapsedRealtime() - rotatedStartMs
+
+        return if (recognitionScore(rotatedResult) > recognitionScore(normalResult)) {
+            RecognitionTimingResult(
+                bitmap = rotatedBitmap,
+                result = rotatedResult,
+                normalRecognitionMs = normalMs,
+                rotatedRecognitionMs = rotatedMs,
+                normalRecognitionCount = 1,
+                rotatedRecognitionCount = 1
+            )
+        } else {
+            RecognitionTimingResult(
+                bitmap = bitmap,
+                result = normalResult,
+                normalRecognitionMs = normalMs,
+                rotatedRecognitionMs = rotatedMs,
+                normalRecognitionCount = 1,
+                rotatedRecognitionCount = 1
+            )
+        }
+    }
+
+    private fun isConfidentNormalResult(result: OcrResult): Boolean {
+        val text = result.text.trim()
+        if (text.isEmpty()) return false
+
+        val upper = text.uppercase()
+        if (upper == "EMPTY" || upper == "ERROR" || upper == "FORMATERR") return false
+
+        val usefulCount = text.count { it.isLetterOrDigit() || it == '-' || it == '/' }
+        if (usefulCount < 4) return false
+
+        val usefulRatio = usefulCount.toFloat() / text.length.coerceAtLeast(1).toFloat()
+
+        return result.confidence >= 0.62f && usefulRatio >= 0.75f
+    }
+
+    private fun recognitionScore(result: OcrResult): Float {
+        val text = result.text.trim()
+        if (text.isEmpty()) return 0f
+
+        val usefulCount = text.count { it.isLetterOrDigit() || it == '-' || it == '/' }
+        val usefulRatio = usefulCount.toFloat() / text.length.coerceAtLeast(1).toFloat()
+
+        return result.confidence * 0.80f +
+            usefulRatio * 0.15f +
+            text.length.coerceAtMost(24) * 0.002f
+    }
+
+    private fun recognize(bitmap: Bitmap): OcrResult {
+        val session = recSession ?: return OcrResult("", 0f, 0f, 0f)
+
+        val aspect = bitmap.width.toFloat() / bitmap.height.coerceAtLeast(1).toFloat()
+        val targetW = ((REC_HEIGHT * aspect).toInt())
+            .coerceIn(32, MAX_REC_WIDTH)
+            .let { w -> if (w % 32 == 0) w else (w / 32 + 1) * 32 }
+
+        val resized = Bitmap.createScaledBitmap(bitmap, targetW, REC_HEIGHT, true)
+        val pixels = IntArray(REC_HEIGHT * targetW)
+        resized.getPixels(pixels, 0, targetW, 0, 0, targetW, REC_HEIGHT)
+
+        val data = FloatBuffer.allocate(1 * 3 * REC_HEIGHT * targetW)
+
+        for (c in 0 until 3) {
+            val shift = when (c) {
+                0 -> 16
+                1 -> 8
+                else -> 0
+            }
+
+            for (p in pixels) {
+                val v = ((p shr shift) and 0xFF) / 127.5f - 1.0f
+                data.put(v)
+            }
+        }
+
+        data.rewind()
+
+        val inputName = session.inputNames.first()
+        val tensor = OnnxTensor.createTensor(
+            env,
+            data,
+            longArrayOf(1, 3, REC_HEIGHT.toLong(), targetW.toLong())
+        )
+
+        tensor.use { inputTensor ->
+            session.run(Collections.singletonMap(inputName, inputTensor)).use { outputs ->
+                val out = extract2DArray(outputs[0].value) ?: return OcrResult("", 0f, 0f, 0f)
+                return decode(out)
+            }
         }
     }
 
     private fun decode(probabilities: Array<FloatArray>): OcrResult {
         val sb = StringBuilder()
-        var lastIdx    = -1
-        var totalScore = 0f; var count = 0
-        var maxConf    = 0f; var minConf = 1.0f
+        var lastIndex = -1
+        var totalConfidence = 0f
+        var count = 0
+        var maxConfidence = 0f
+        var minConfidence = 1f
 
         for (probs in probabilities) {
-            val maxIdx = probs.indices.maxByOrNull { probs[it] } ?: 0
-            val conf   = probs[maxIdx]
-            if (maxIdx > 0 && maxIdx != lastIdx && maxIdx < labelList.size) {
-                sb.append(labelList[maxIdx])
-                totalScore += conf; count++
-                if (conf > maxConf) maxConf = conf
-                if (conf < minConf) minConf = conf
+            if (probs.isEmpty()) continue
+
+            val maxIndex = probs.indices.maxByOrNull { probs[it] } ?: 0
+            val confidence = probs[maxIndex]
+
+            if (maxIndex > 0 && maxIndex != lastIndex && maxIndex < labelList.size) {
+                val text = labelList[maxIndex]
+                sb.append(text)
+
+                totalConfidence += confidence
+                count++
+
+                if (confidence > maxConfidence) maxConfidence = confidence
+                if (confidence < minConfidence) minConfidence = confidence
             }
-            lastIdx = maxIdx
+
+            lastIndex = maxIndex
         }
-        val avg = if (count > 0) totalScore / count else 0f
+
+        val avg = if (count > 0) totalConfidence / count else 0f
+        val minC = if (count > 0) minConfidence else 0f
+
         return OcrResult(
-            text          = sb.toString(),
-            confidence    = avg,
-            maxConfidence = if (count > 0) maxConf else 0f,
-            minConfidence = if (count > 0) minConf else 0f
+            text = sb.toString(),
+            confidence = avg,
+            maxConfidence = maxConfidence,
+            minConfidence = minC
         )
     }
 
-    // ──────────────────────────────────────────────────────────────────────
-    // ユーティリティ
-    // ──────────────────────────────────────────────────────────────────────
-
-    private fun loadLabels() {
-        context.assets.open("dict.txt").bufferedReader().useLines { lines ->
-            labelList.add("blank")
-            labelList.addAll(lines)
-            labelList.add(" ")
+    private fun safePerspectiveCrop(bitmap: Bitmap, polygon: FloatArray): Bitmap {
+        return try {
+            perspectiveCrop(bitmap, polygon)
+        } catch (_: Exception) {
+            cropBitmap(bitmap, polygonToBoundingRect(polygon))
         }
     }
 
-    private fun cropBitmap(bitmap: Bitmap, rect: Rect): Bitmap {
-        val x = max(0, rect.left); val y = max(0, rect.top)
-        val w = min(rect.width(),  bitmap.width  - x)
-        val h = min(rect.height(), bitmap.height - y)
-        return if (w > 0 && h > 0) Bitmap.createBitmap(bitmap, x, y, w, h) else bitmap
-    }
+    private fun perspectiveCrop(bitmap: Bitmap, rawPolygon: FloatArray): Bitmap {
+        val src = orderQuadPoints(rawPolygon)
 
-    private fun mergeRects(rects: List<Rect>): List<Rect> {
-        if (rects.isEmpty()) return emptyList()
-        val result = mutableListOf<Rect>()
-        for (rect in rects.sortedBy { it.top }) {
-            var merged = false
-            for (res in result) {
-                if (Rect.intersects(Rect(res).apply { inset(-50, -50) }, rect)) {
-                    res.union(rect); merged = true; break
-                }
-            }
-            if (!merged) result.add(Rect(rect))
+        fun dist(i: Int, j: Int): Float {
+            val dx = src[i * 2] - src[j * 2]
+            val dy = src[i * 2 + 1] - src[j * 2 + 1]
+            return sqrt(dx * dx + dy * dy)
         }
-        return result.filter { it.width() > 20 && it.height() > 20 }
+
+        val targetW = ((dist(0, 1) + dist(3, 2)) / 2f).toInt().coerceIn(1, 2000)
+        val targetH = ((dist(0, 3) + dist(1, 2)) / 2f).toInt().coerceIn(1, 2000)
+
+        val dst = floatArrayOf(
+            0f, 0f,
+            targetW.toFloat(), 0f,
+            targetW.toFloat(), targetH.toFloat(),
+            0f, targetH.toFloat()
+        )
+
+        val matrix = Matrix()
+        matrix.setPolyToPoly(src, 0, dst, 0, 4)
+
+        val out = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        canvas.drawColor(Color.WHITE)
+        canvas.drawBitmap(
+            bitmap,
+            matrix,
+            Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        )
+
+        return out
     }
 
+    private fun orderQuadPoints(src: FloatArray): FloatArray {
+        if (src.size != 8) return src
+
+        val pts = Array(4) { i ->
+            PointF(src[i * 2], src[i * 2 + 1])
+        }
+
+        val sortedByY = pts.sortedBy { it.y }
+        val top = sortedByY.take(2).sortedBy { it.x }
+        val bottom = sortedByY.takeLast(2).sortedBy { it.x }
+
+        val topLeft = top[0]
+        val topRight = top[1]
+        val bottomLeft = bottom[0]
+        val bottomRight = bottom[1]
+
+        return floatArrayOf(
+            topLeft.x, topLeft.y,
+            topRight.x, topRight.y,
+            bottomRight.x, bottomRight.y,
+            bottomLeft.x, bottomLeft.y
+        )
+    }
+
+    private fun rotateBitmap(bitmap: Bitmap, degrees: Float): Bitmap {
+        val normalized = ((degrees % 360f) + 360f) % 360f
+        if (normalized < 0.01f || normalized > 359.99f) return bitmap
+
+        val matrix = Matrix().apply {
+            postRotate(normalized)
+        }
+
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
+    @Suppress("UNCHECKED_CAST")
     private fun extract2DArray(value: Any): Array<FloatArray>? {
         return try {
-            var current = value
+            var current: Any = value
+
             while (current is Array<*>) {
                 if (current.isEmpty()) return null
+
                 val first = current[0]
-                if (first is FloatArray) return current as Array<FloatArray>
-                current = first as Any
+
+                if (first is FloatArray) {
+                    return current as Array<FloatArray>
+                }
+
+                current = first ?: return null
             }
+
             null
-        } catch (e: Exception) { null }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun close() {
+        try {
+            detSession?.close()
+        } catch (_: Exception) {
+        }
+
+        try {
+            recSession?.close()
+        } catch (_: Exception) {
+        }
+
+        detSession = null
+        recSession = null
     }
 }

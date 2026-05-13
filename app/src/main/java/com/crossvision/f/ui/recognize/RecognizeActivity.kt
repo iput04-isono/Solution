@@ -37,6 +37,9 @@ class RecognizeActivity : AppCompatActivity() {
     private var processName = ""
     private var userId = ""
 
+    /** 手動回転量（度）。カメラ/ギャラリーで新画像を読み込むたびに 0 にリセット */
+    private var manualRotationDegrees = 0f
+
     // カメラ権限リクエスト
     private val cameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -117,6 +120,18 @@ class RecognizeActivity : AppCompatActivity() {
                 performOcr(bitmap)
             }
         }
+
+        // 左90°回転ボタン
+        binding.btnRotateLeft.setOnClickListener {
+            manualRotationDegrees = (manualRotationDegrees - 90f + 360f) % 360f
+            currentBitmap?.let { updatePreviewWithRotation(it) }
+        }
+
+        // 右90°回転ボタン
+        binding.btnRotateRight.setOnClickListener {
+            manualRotationDegrees = (manualRotationDegrees + 90f) % 360f
+            currentBitmap?.let { updatePreviewWithRotation(it) }
+        }
     }
 
     private fun checkCameraPermissionAndLaunch() {
@@ -137,10 +152,23 @@ class RecognizeActivity : AppCompatActivity() {
 
     private fun setPreviewImage(bitmap: Bitmap) {
         currentBitmap = bitmap
+        manualRotationDegrees = 0f  // 新しい画像はリセット
         binding.ivPreview.setImageBitmap(bitmap)
         binding.ivPreview.visibility = View.VISIBLE
         binding.placeholderLayout.visibility = View.GONE
+        binding.rotationLayout.visibility = View.VISIBLE
         binding.btnRecognize.visibility = View.VISIBLE
+    }
+
+    /** 手動回転角を適用してプレビューを更新する */
+    private fun updatePreviewWithRotation(bitmap: Bitmap) {
+        val rotated = if (manualRotationDegrees != 0f) {
+            val matrix = Matrix().apply { postRotate(manualRotationDegrees) }
+            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        } else {
+            bitmap
+        }
+        binding.ivPreview.setImageBitmap(rotated)
     }
 
     private fun performOcr(bitmap: Bitmap) {
@@ -149,7 +177,14 @@ class RecognizeActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val (overlayBitmap, results) = ocrProcessor.recognizeWithOverlay(bitmap)
+                // 手動回転を適用してから OCR へ渡す
+                val inputBitmap = if (manualRotationDegrees != 0f) {
+                    val matrix = Matrix().apply { postRotate(manualRotationDegrees) }
+                    Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+                } else {
+                    bitmap
+                }
+                val (overlayBitmap, results) = ocrProcessor.recognizeWithOverlay(inputBitmap)
                 val overlayPath = saveOverlayBitmap(overlayBitmap)
                 navigateToConfirm(results, overlayPath)
             } catch (e: Exception) {

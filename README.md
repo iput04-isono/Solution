@@ -5,6 +5,97 @@
 鉄骨製品に刻印された製品番号をカメラで撮影し、AI（PaddleOCR）で自動認識・工程登録するシステムです。  
 認識した製品コードはサーバーへリアルタイム送信され、オフライン時も端末に保存してオンライン復帰時に自動同期します。
 
+---
+
+## 🆕 prototype_saitoOCR_ver1.0 — 変更点・追加パラメータ（prototype_ver2.1 からの差分）
+
+> ブランチ: `prototype_saitoOCR_ver1.0` | 更新日: 2026-05-13  
+> 斎藤案 OCR エンジンへの換装 ＋ 手動回転ボタン追加。UI・照合ロジックは prototype_ver2.1 を継承。  
+> **アプリ ID**: `com.crossvision.f.saito`（既存アプリと同時インストール可能）  
+> **アプリ名**: 鉄骨認識(saito)
+
+### 変更点一覧
+
+| 項目 | prototype_ver2.1 | prototype_saitoOCR_ver1.0（本ブランチ） |
+|---|---|---|
+| **コントラスト補正方式** | パーセンタイルクリッピング（上下2%除外）＋ヒストグラムストレッチ | 線形ストレッチ（scale上限2.2倍, bias+8f） |
+| **コントラストスキップ閾値** | `CONTRAST_SKIP_THRESHOLD = 5f` | `range < 12f` でスキップ（範囲が狭すぎる場合）|
+| **DBNet 入力方式** | 縦横比保持＋グレー(128)パディングで 640×640 | 単純リスケール 640×640（アスペクト比は無視） |
+| **向き認識方式** | 0°/90°/180°/270° の4方向を**並列**推論し全比較 | 0° を推論 → 信頼度が十分なら即終了、不十分なら 180° を追加推論（**逐次・早期終了**） |
+| **向き判定スコア** | LabelMatcher 編集距離優先（同距離なら信頼度） | 信頼度重みスコア `conf×0.80 + 有効文字率×0.15 + 文字数×0.002` |
+| **BFS 検出閾値** | `DET_THRESHOLD = 0.28f` | `threshold = 0.26f`（より低い確率値の文字も検出）|
+| **BFS 最小ピクセル数** | `BFS_MIN_PX = 25` | `minPx = 24` |
+| **最大検出領域数** | `MAX_REGIONS = 12` | `MAX_POLYGON_REGIONS = 24`（最大2倍の領域を処理）|
+| **認識前フィルタ** | なし | `isUsefulCropForOcr()` でクロップ画像の画質を事前チェック（真っ白・低コントラストを除外）|
+| **認識後フィルタ** | なし | `isUsefulOcrResult()` で認識テキストの妥当性を事後チェック（空・記号のみを除外）|
+| **処理時間計測** | なし | `OcrTiming` クラスで各ステップの処理時間（ms）を記録 |
+| **手動回転ボタン** | なし | 認識画面に **「↺ 左90°」「↻ 右90°」** ボタンを追加。プレビューと OCR 入力の両方に適用 |
+
+### 新規パラメータ詳細
+
+#### コントラスト補正（`OcrEngine.kt` — `enhanceContrastForDetection`）
+
+```kotlin
+// range = maxLuminance - minLuminance（0〜255）
+if (range < 12f) return bitmap          // 範囲が狭い場合はスキップ（変更前 ver2.1: 5f）
+val scale = (220f / range).coerceAtMost(2.2f)  // 引き伸ばし倍率の上限 2.2 倍
+val bias  = -minL * scale + 8f          // 明るさ底上げ（+8f）
+```
+
+| パラメータ | 値 | 意味 |
+|---|---|---|
+| スキップ閾値 | `12f` | 輝度レンジが 12 未満なら補正しない |
+| scale 上限 | `2.2f` | 引き伸ばし過ぎによる白飛びを防止 |
+| bias | `+8f` | 暗い画像全体を微量に底上げ |
+
+#### 向き認識スコア（`OcrEngine.kt` — `recognitionScore`）
+
+```kotlin
+fun recognitionScore(result: OcrResult): Float {
+    val usefulRatio = 有効文字数 / 全文字数   // 英数字・ハイフン・スラッシュの比率
+    return result.confidence * 0.80f          // 信頼度（重み 80%）
+         + usefulRatio      * 0.15f          // 有効文字率（重み 15%）
+         + text.length.coerceAtMost(24) * 0.002f  // 文字数ボーナス（上限 24 文字）
+}
+```
+
+#### 認識前フィルタ（`isUsefulCropForOcr`）
+
+| チェック条件 | 除外される画像 |
+|---|---|
+| `brightRatio > 0.96 && darkRatio < 0.002 && contrast < 35` | ほぼ真っ白な領域 |
+| `coloredRatio < 0.002 && edgeRatio < 0.003 && contrast < 45` | 色も輪郭もないフラットな領域 |
+| `coloredCount < 2 && edgeLikeCount < 3 && contrast < 35` | 情報量が極端に少ない領域 |
+
+#### 認識後フィルタ（`isUsefulOcrResult`）
+
+| チェック条件 | 除外される結果 |
+|---|---|
+| テキストが空 | 空文字 |
+| `"EMPTY"` / `"ERROR"` / `"FORMATERR"` | モデルのエラー出力 |
+| 有効文字（英数字・`-`・`/`）比率 < 45% | 記号・ゴミ文字だけの認識 |
+| 有効文字数 ≤ 2 かつ信頼度 < 60% | 短すぎ＆低信頼の認識 |
+
+### 手動回転ボタンの仕様
+
+```
+[認識画面]
+   ┌──────────────────────────────┐
+   │    カメラ/ギャラリー画像         │
+   │        プレビュー                │
+   └──────────────────────────────┘
+   [ ↺ 左90° ]   [ ↻ 右90° ]       ← 新規追加（画像選択後に表示）
+   [ カメラ ]     [ ギャラリー ]
+   [  文字を認識する  ]
+```
+
+- ボタンタップごとに `manualRotationDegrees` を ±90° 更新
+- プレビュー画像に即時反映（視覚確認できる）
+- 「文字を認識する」ボタン押下時に回転を適用した画像を OCR に渡す
+- 新しい画像を読み込むと `manualRotationDegrees = 0f` にリセット
+
+---
+
 ## リポジトリ
 
 | リポジトリ | ブランチ | 役割 |
@@ -13,6 +104,7 @@
 | [iput04-isono/Solution](https://github.com/iput04-isono/Solution) | `prototype` | チーム統合ブランチ（リリース相当） |
 | [iput04-isono/Solution](https://github.com/iput04-isono/Solution) | `prototype_Ver2.0` | prototype の Ver2.0 スナップショット |
 | [iput04-isono/Solution](https://github.com/iput04-isono/Solution) | `prototype_ver2.1` | OCR精度改善・UI強化・バグ修正（Ver2.0 からの差分） |
+| [iput04-isono/Solution](https://github.com/iput04-isono/Solution) | `prototype_saitoOCR_ver1.0` | 斎藤案OCRエンジン換装・手動回転ボタン追加（Ver2.1 からの差分） |
 
 ---
 
@@ -685,6 +777,7 @@ git push origin feature/機能名
 
 | バージョン | 日付 | 内容 |
 |---|---|---|
+| prototype_saitoOCR_ver1.0 | 2026-05-13 | 斎藤案OCRエンジン換装（線形コントラスト・逐次向き認識・画質フィルタ追加）、手動回転ボタン追加（±90°）、別アプリID(.saito)で共存インストール対応 |
 | prototype_ver2.1 | 2026-05-13 | OCR精度改善（コントラスト・4方向認識・DBNetパディング）、UI強化（クロップ画像表示・オーバーレイ拡大）、カメラ回転修正、工程選択バグ修正 |
 | Ver 2.0 | 2026-04-24 | 製品コードマスターの Room DB 管理化・サーバー自動同期機能を統合（GroupA × チームメンバー機能マージ） |
 | Ver 1.x | 〜2026-04-23 | OCR 認識・登録・履歴・オフライン同期の基本機能実装 |

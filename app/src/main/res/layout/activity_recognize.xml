@@ -78,6 +78,35 @@
             </FrameLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- 手動回転ボタン（画像選択後に表示） -->
+        <LinearLayout
+            android:id="@+id/rotationLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:visibility="gone"
+            android:layout_marginBottom="@dimen/spacing_sm">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnRotateLeft"
+                style="@style/SecondaryButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="↺ 左90°"
+                android:layout_marginEnd="@dimen/spacing_sm" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnRotateRight"
+                style="@style/SecondaryButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="↻ 右90°" />
+
+        </LinearLayout>
+
         <!-- 操作ボタン -->
         <LinearLayout
             android:layout_width="match_parent"
