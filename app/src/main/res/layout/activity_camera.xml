@@ -12,13 +12,6 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- リアルタイム検出枠オーバーレイ（PreviewViewの上に透明で重ねる） -->
-    <com.crossvision.f.ui.camera.DetectionOverlayView
-        android:id="@+id/detectionOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@android:color/transparent" />
-
     <!-- ピント合わせ時の枠（初期非表示） -->
     <View
         android:id="@+id/focusIndicator"
@@ -26,6 +19,30 @@
         android:layout_height="64dp"
         android:background="@drawable/bg_focus_indicator"
         android:visibility="invisible" />
+
+    <!-- 撮影ガイド枠（ターゲット枠） -->
+    <View
+        android:id="@+id/guideFrame"
+        android:layout_width="280dp"
+        android:layout_height="180dp"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_camera_guide" />
+
+    <!-- 品質警告メッセージ -->
+    <TextView
+        android:id="@+id/tvQualityWarning"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="100dp"
+        android:background="@drawable/bg_warning_label"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
+        android:text="ぼけています"
+        android:textColor="@color/on_primary"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
 
     <!-- 上部ツールバー -->
     <LinearLayout
