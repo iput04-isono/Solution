@@ -107,66 +107,90 @@ class ConfirmActivity : AppCompatActivity() {
         
         binding.ivOverlay.setImageBitmap(bitmap)
         binding.ivOverlay.visibility = View.VISIBLE
-        binding.ivOverlay.scaleType = android.widget.ImageView.ScaleType.MATRIX
+        binding.ivOverlay.scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
 
-        // ズームジェスチャのセットアップ
-        scaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        // タップで全画面表示
+        binding.ivOverlay.setOnClickListener {
+            showFullScreenImage(bitmap)
+        }
+    }
+
+    /** 画像を全画面ダイアログで表示（ズーム機能付き） */
+    @SuppressLint("ClickableViewAccessibility")
+    private fun showFullScreenImage(bitmap: android.graphics.Bitmap) {
+        val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        val imageView = android.widget.ImageView(this).apply {
+            setImageBitmap(bitmap)
+            scaleType = android.widget.ImageView.ScaleType.MATRIX
+            layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
+        dialog.setContentView(imageView)
+
+        val matrix = Matrix()
+        val savedMat = Matrix()
+        val startPoint = PointF()
+        val midPoint = PointF()
+        var oldDist = 1f
+        var currentMode = NONE
+
+        val scaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
-                val scaleFactor = detector.scaleFactor
-                imageMatrix.postScale(scaleFactor, scaleFactor, detector.focusX, detector.focusY)
-                binding.ivOverlay.imageMatrix = imageMatrix
+                matrix.postScale(detector.scaleFactor, detector.scaleFactor, detector.focusX, detector.focusY)
+                imageView.imageMatrix = matrix
                 return true
             }
         })
 
-        // タッチイベント（ドラッグ移動）
-        binding.ivOverlay.setOnTouchListener { v, event ->
+        imageView.setOnTouchListener { _, event ->
             scaleDetector.onTouchEvent(event)
-            
-            val curr = PointF(event.x, event.y)
             when (event.action and MotionEvent.ACTION_MASK) {
                 MotionEvent.ACTION_DOWN -> {
-                    savedMatrix.set(imageMatrix)
-                    start.set(event.x, event.y)
-                    mode = DRAG
+                    savedMat.set(matrix)
+                    startPoint.set(event.x, event.y)
+                    currentMode = DRAG
                 }
                 MotionEvent.ACTION_POINTER_DOWN -> {
                     oldDist = spacing(event)
                     if (oldDist > 10f) {
-                        savedMatrix.set(imageMatrix)
-                        midPoint(mid, event)
-                        mode = ZOOM
+                        savedMat.set(matrix)
+                        midPoint(midPoint, event)
+                        currentMode = ZOOM
                     }
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
-                    mode = NONE
-                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> currentMode = NONE
                 MotionEvent.ACTION_MOVE -> {
-                    if (mode == DRAG) {
-                        imageMatrix.set(savedMatrix)
-                        imageMatrix.postTranslate(event.x - start.x, event.y - start.y)
-                    } else if (mode == ZOOM) {
+                    if (currentMode == DRAG) {
+                        matrix.set(savedMat)
+                        matrix.postTranslate(event.x - startPoint.x, event.y - startPoint.y)
+                    } else if (currentMode == ZOOM) {
                         val newDist = spacing(event)
                         if (newDist > 10f) {
-                            imageMatrix.set(savedMatrix)
+                            matrix.set(savedMat)
                             val scale = newDist / oldDist
-                            imageMatrix.postScale(scale, scale, mid.x, mid.y)
+                            matrix.postScale(scale, scale, midPoint.x, midPoint.y)
                         }
                     }
                 }
             }
-            binding.ivOverlay.imageMatrix = imageMatrix
+            imageView.imageMatrix = matrix
             true
         }
+
+        dialog.show()
     }
 
     private fun spacing(event: MotionEvent): Float {
+        if (event.pointerCount < 2) return 0f
         val x = event.getX(0) - event.getX(1)
         val y = event.getY(0) - event.getY(1)
         return Math.sqrt((x * x + y * y).toDouble()).toFloat()
     }
 
     private fun midPoint(point: PointF, event: MotionEvent) {
+        if (event.pointerCount < 2) return
         val x = event.getX(0) + event.getX(1)
         val y = event.getY(0) + event.getY(1)
         point.set(x / 2, y / 2)

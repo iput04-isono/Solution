@@ -51,8 +51,10 @@ import kotlin.math.*
 class CameraActivity : AppCompatActivity(), SensorEventListener {
 
     private lateinit var binding: ActivityCameraBinding
+    private var camera: Camera? = null
     private var imageCapture: ImageCapture? = null
     private lateinit var cameraExecutor: ExecutorService
+    private lateinit var scaleGestureDetector: ScaleGestureDetector
     private lateinit var outputDirectory: File
 
     // ── カメラ機能制御用 ──────────────────────────────────────────────────
@@ -138,6 +140,37 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
         // シャッターボタン
         binding.btnCapture.setOnClickListener {
             takePhoto()
+        }
+        
+        setupZoom()
+    }
+
+    private fun setupZoom() {
+        scaleGestureDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                val camera = camera ?: return true
+                val currentZoomRatio = camera.cameraInfo.zoomState.value?.linearZoom ?: 0f
+                val delta = detector.scaleFactor - 1f
+                val newZoom = (currentZoomRatio + delta).coerceIn(0f, 1f)
+                camera.cameraControl.setLinearZoom(newZoom)
+                return true
+            }
+        })
+
+        binding.previewView.setOnTouchListener { _, event ->
+            scaleGestureDetector.onTouchEvent(event)
+            if (event.action == MotionEvent.ACTION_UP) {
+                val cam = camera ?: return@setOnTouchListener true
+                val factory = binding.previewView.meteringPointFactory
+                val point = factory.createPoint(event.x, event.y)
+                val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
+                    .setAutoCancelDuration(3, TimeUnit.SECONDS)
+                    .build()
+                cam.cameraControl.startFocusAndMetering(action)
+
+                showFocusIndicator(event.x, event.y)
+            }
+            true
         }
     }
 
