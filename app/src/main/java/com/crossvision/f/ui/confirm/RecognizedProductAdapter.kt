@@ -87,12 +87,25 @@ class RecognizedProductAdapter(
             }
 
             binding.cbSelect.setOnCheckedChangeListener { _, isChecked ->
-                items[position] = items[position].copy(isSelected = isChecked)
-                onSelectionChanged(position, isChecked)
+                val pos = bindingAdapterPosition
+                if (pos != RecyclerView.NO_POSITION) {
+                    items[pos] = items[pos].copy(isSelected = isChecked)
+                    onSelectionChanged(pos, isChecked)
+                }
             }
 
-            binding.btnEdit.setOnClickListener { onEditClick(position) }
-            binding.btnDelete.setOnClickListener { onDeleteClick(position) }
+            binding.btnEdit.setOnClickListener {
+                val pos = bindingAdapterPosition
+                if (pos != RecyclerView.NO_POSITION) {
+                    onEditClick(pos)
+                }
+            }
+            binding.btnDelete.setOnClickListener {
+                val pos = bindingAdapterPosition
+                if (pos != RecyclerView.NO_POSITION) {
+                    onDeleteClick(pos)
+                }
+            }
         }
     }
 }

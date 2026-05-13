@@ -187,7 +187,8 @@
             android:id="@+id/btnRetake"
             style="@style/SecondaryButton"
             android:layout_width="0dp"
-            android:layout_height="@dimen/button_height"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/button_height"
             android:layout_weight="1"
             android:text="再撮影"
             android:layout_marginEnd="@dimen/spacing_sm" />
@@ -196,7 +197,8 @@
             android:id="@+id/btnRegister"
             style="@style/PrimaryButton"
             android:layout_width="0dp"
-            android:layout_height="@dimen/button_height"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/button_height"
             android:layout_weight="1"
             android:text="@string/confirm_register_selected" />
 
