@@ -64,4 +64,47 @@ object ImageQualityChecker {
 
         return sumSq / laplacian.size
     }
+
+    /**
+     * 検出された文字列が画面に対して極端に傾いているか判定する。
+     * 画面の水平方向に対して ±15度 以内であれば正常とみなす。
+     */
+    fun isTextTilted(polygons: List<FloatArray>): Boolean {
+        if (polygons.isEmpty()) return false
+        for (poly in polygons) {
+            if (poly.size < 4) continue
+            // 点0(x0,y0) と 点1(x1,y1) から角度を計算
+            val dx = (poly[2] - poly[0]).toDouble()
+            val dy = (poly[3] - poly[1]).toDouble()
+            val angleRad = Math.atan2(dy, dx)
+            val angleDeg = Math.abs(Math.toDegrees(angleRad))
+
+            // 0度(右向き), 180度(左向き) からのズレをチェック
+            // 縦書き（90度）は今回の要件（製品番号）では対象外とする
+            val diffFromHorizontal = if (angleDeg > 90) Math.abs(180 - angleDeg) else angleDeg
+            if (diffFromHorizontal > 15.0) return true
+        }
+        return false
+    }
+
+    /**
+     * 検出された文字列が画面の端にかかっている（見切れている）か判定する。
+     */
+    fun isTextCutOff(polygons: List<FloatArray>, width: Int, height: Int): Boolean {
+        if (polygons.isEmpty()) return false
+        val marginRatio = 0.03f // 画面端 3% を見切れ境界とする
+        val marginX = width * marginRatio
+        val marginY = height * marginRatio
+
+        for (poly in polygons) {
+            for (i in 0 until poly.size / 2) {
+                val x = poly[i * 2]
+                val y = poly[i * 2 + 1]
+                if (x < marginX || x > width - marginX || y < marginY || y > height - marginY) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
 }

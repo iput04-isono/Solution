@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="280dp"
+    android:height="200dp"
+    android:viewportWidth="280"
+    android:viewportHeight="200">
+    <!-- 左上 -->
+    <path
+        android:pathData="M0,40 L0,0 L40,0"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3" />
+    <!-- 右上 -->
+    <path
+        android:pathData="M240,0 L280,0 L280,40"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3" />
+    <!-- 右下 -->
+    <path
+        android:pathData="M280,160 L280,200 L240,200"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3" />
+    <!-- 左下 -->
+    <path
+        android:pathData="M40,200 L0,200 L0,160"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3" />
+</vector>

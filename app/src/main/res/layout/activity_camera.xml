@@ -20,27 +20,27 @@
         android:background="@drawable/bg_focus_indicator"
         android:visibility="invisible" />
 
-    <!-- 撮影ガイド枠（ターゲット枠） -->
+    <!-- 撮影ガイド枠（四隅のコーナーマークのみ） -->
     <View
         android:id="@+id/guideFrame"
-        android:layout_width="280dp"
-        android:layout_height="180dp"
+        android:layout_width="320dp"
+        android:layout_height="240dp"
         android:layout_gravity="center"
-        android:background="@drawable/bg_camera_guide" />
+        android:background="@drawable/bg_camera_corners" />
 
-    <!-- 品質警告メッセージ -->
+    <!-- 品質警告メッセージ（被写体を邪魔しない位置へ） -->
     <TextView
         android:id="@+id/tvQualityWarning"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginTop="100dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="160dp"
         android:background="@drawable/bg_warning_label"
         android:paddingHorizontal="16dp"
         android:paddingVertical="8dp"
         android:text="ぼけています"
         android:textColor="@color/on_primary"
-        android:textSize="18sp"
+        android:textSize="16sp"
         android:textStyle="bold"
         android:visibility="gone" />
 
