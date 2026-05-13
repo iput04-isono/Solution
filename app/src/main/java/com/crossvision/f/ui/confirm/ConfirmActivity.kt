@@ -1,5 +1,6 @@
 package com.crossvision.f.ui.confirm
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.Bundle
@@ -15,6 +16,10 @@ import com.crossvision.f.ocr.ProductCodeValidator
 import com.crossvision.f.ui.register.RegisterActivity
 import com.crossvision.f.ui.process.ProcessSelectionActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import android.graphics.Matrix
+import android.graphics.PointF
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import java.io.File
 
 /**
@@ -28,6 +33,21 @@ class ConfirmActivity : AppCompatActivity() {
     private var constructionName = ""
     private var processName = ""
     private var userId = ""
+
+    // ズーム・パン用
+    private var imageMatrix = Matrix()
+    private var savedMatrix = Matrix()
+    private var mode = NONE
+    private val start = PointF()
+    private val mid = PointF()
+    private var oldDist = 1f
+    private lateinit var scaleDetector: ScaleGestureDetector
+
+    companion object {
+        private const val NONE = 0
+        private const val DRAG = 1
+        private const val ZOOM = 2
+    }
 
     // 工事・工程変更用ランチャー
     private val editProcessLauncher = registerForActivityResult(
@@ -78,13 +98,78 @@ class ConfirmActivity : AppCompatActivity() {
         binding.toolbar.setNavigationOnClickListener { finish() }
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private fun setupOverlayImage(path: String?) {
         if (path == null) return
         val file = File(path)
         if (!file.exists()) return
         val bitmap = BitmapFactory.decodeFile(path) ?: return
+        
         binding.ivOverlay.setImageBitmap(bitmap)
         binding.ivOverlay.visibility = View.VISIBLE
+        binding.ivOverlay.scaleType = android.widget.ImageView.ScaleType.MATRIX
+
+        // ズームジェスチャのセットアップ
+        scaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                val scaleFactor = detector.scaleFactor
+                imageMatrix.postScale(scaleFactor, scaleFactor, detector.focusX, detector.focusY)
+                binding.ivOverlay.imageMatrix = imageMatrix
+                return true
+            }
+        })
+
+        // タッチイベント（ドラッグ移動）
+        binding.ivOverlay.setOnTouchListener { v, event ->
+            scaleDetector.onTouchEvent(event)
+            
+            val curr = PointF(event.x, event.y)
+            when (event.action and MotionEvent.ACTION_MASK) {
+                MotionEvent.ACTION_DOWN -> {
+                    savedMatrix.set(imageMatrix)
+                    start.set(event.x, event.y)
+                    mode = DRAG
+                }
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    oldDist = spacing(event)
+                    if (oldDist > 10f) {
+                        savedMatrix.set(imageMatrix)
+                        midPoint(mid, event)
+                        mode = ZOOM
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
+                    mode = NONE
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (mode == DRAG) {
+                        imageMatrix.set(savedMatrix)
+                        imageMatrix.postTranslate(event.x - start.x, event.y - start.y)
+                    } else if (mode == ZOOM) {
+                        val newDist = spacing(event)
+                        if (newDist > 10f) {
+                            imageMatrix.set(savedMatrix)
+                            val scale = newDist / oldDist
+                            imageMatrix.postScale(scale, scale, mid.x, mid.y)
+                        }
+                    }
+                }
+            }
+            binding.ivOverlay.imageMatrix = imageMatrix
+            true
+        }
+    }
+
+    private fun spacing(event: MotionEvent): Float {
+        val x = event.getX(0) - event.getX(1)
+        val y = event.getY(0) - event.getY(1)
+        return Math.sqrt((x * x + y * y).toDouble()).toFloat()
+    }
+
+    private fun midPoint(point: PointF, event: MotionEvent) {
+        val x = event.getX(0) + event.getX(1)
+        val y = event.getY(0) + event.getY(1)
+        point.set(x / 2, y / 2)
     }
 
     private fun setupUnmatchedSection(unmatchedTexts: List<String>) {

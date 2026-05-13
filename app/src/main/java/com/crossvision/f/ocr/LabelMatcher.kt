@@ -125,7 +125,9 @@ class LabelMatcher private constructor(rawLabels: List<String>, source: String) 
             '5' to 'S', 'S' to '5',
             '8' to 'B', 'B' to '8',
             '6' to 'G', 'G' to '6',
-            '2' to 'Z', 'Z' to '2'
+            '2' to 'Z', 'Z' to '2',
+            '7' to 'T', 'T' to '7',
+            '4' to 'A', 'A' to '4'
         )
         for (i in text.indices) {
             val sub = substitutions[text[i]]
