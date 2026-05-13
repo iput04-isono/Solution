@@ -238,8 +238,11 @@ def get_processes():
         {"id": 10, "constructionId": 2, "name": "塗装", "code": "P04", "isActive": True},
         {"id": 11, "constructionId": 2, "name": "検査", "code": "P05", "isActive": True},
         {"id": 12, "constructionId": 3, "name": "FINS", "code": "FINS", "isActive": True},
-        {"id": 13, "constructionId": 3, "name": "溶接", "code": "P03", "isActive": True},
-        {"id": 14, "constructionId": 3, "name": "検査", "code": "P05", "isActive": True}
+        {"id": 13, "constructionId": 3, "name": "FAS検査", "code": "FAS", "isActive": True},
+        {"id": 14, "constructionId": 3, "name": "FAILA0", "code": "FAIL", "isActive": True},
+        {"id": 15, "constructionId": 3, "name": "FAW検査", "code": "FAW", "isActive": True},
+        {"id": 16, "constructionId": 3, "name": "CINJA0", "code": "CINJ", "isActive": True},
+        {"id": 17, "constructionId": 3, "name": "建て方管理", "code": "BLD", "isActive": True}
     ]
     return load_json_list(PROCESSES_FILE, default_processes)
 

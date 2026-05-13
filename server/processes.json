@@ -1,0 +1,19 @@
+[
+  {"id": 1, "constructionId": 1, "name": "FINS", "code": "FINS", "isActive": true},
+  {"id": 2, "constructionId": 1, "name": "FAS検査", "code": "FAS", "isActive": true},
+  {"id": 3, "constructionId": 1, "name": "FAILA0", "code": "FAIL", "isActive": true},
+  {"id": 4, "constructionId": 1, "name": "FAW検査", "code": "FAW", "isActive": true},
+  {"id": 5, "constructionId": 1, "name": "CINJA0", "code": "CINJ", "isActive": true},
+  {"id": 6, "constructionId": 1, "name": "建て方管理", "code": "BLD", "isActive": true},
+  {"id": 7, "constructionId": 2, "name": "一次加工", "code": "P01", "isActive": true},
+  {"id": 8, "constructionId": 2, "name": "組立", "code": "P02", "isActive": true},
+  {"id": 9, "constructionId": 2, "name": "溶接", "code": "P03", "isActive": true},
+  {"id": 10, "constructionId": 2, "name": "塗装", "code": "P04", "isActive": true},
+  {"id": 11, "constructionId": 2, "name": "検査", "code": "P05", "isActive": true},
+  {"id": 12, "constructionId": 3, "name": "FINS", "code": "FINS", "isActive": true},
+  {"id": 13, "constructionId": 3, "name": "FAS検査", "code": "FAS", "isActive": true},
+  {"id": 14, "constructionId": 3, "name": "FAILA0", "code": "FAIL", "isActive": true},
+  {"id": 15, "constructionId": 3, "name": "FAW検査", "code": "FAW", "isActive": true},
+  {"id": 16, "constructionId": 3, "name": "CINJA0", "code": "CINJ", "isActive": true},
+  {"id": 17, "constructionId": 3, "name": "建て方管理", "code": "BLD", "isActive": true}
+]
