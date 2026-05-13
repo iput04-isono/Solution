@@ -7,6 +7,10 @@ import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Matrix
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.hardware.camera2.CaptureRequest
 import android.os.Bundle
 import android.util.Log
@@ -25,7 +29,6 @@ import com.crossvision.f.R
 import com.crossvision.f.databinding.ActivityCameraBinding
 import com.crossvision.f.ocr.ImagePreprocessor
 import com.crossvision.f.ocr.ImageQualityChecker
-import com.crossvision.f.ocr.OcrEngine
 import kotlinx.coroutines.*
 import java.io.File
 import java.text.SimpleDateFormat
@@ -33,7 +36,7 @@ import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import kotlin.math.abs
+import kotlin.math.*
 
 /**
  * カメラ画面
@@ -45,7 +48,7 @@ import kotlin.math.abs
  * 検出された文字列領域をDetectionOverlayViewにリアルタイム描画する。
  * 認識（ppocr_rec.onnx）はシャッター後のみ実行し、ライブでは検出のみに限定する。
  */
-class CameraActivity : AppCompatActivity() {
+class CameraActivity : AppCompatActivity(), SensorEventListener {
 
     private lateinit var binding: ActivityCameraBinding
     private var imageCapture: ImageCapture? = null
@@ -57,9 +60,11 @@ class CameraActivity : AppCompatActivity() {
     private var cameraInfo: CameraInfo? = null
     private var flashMode = ImageCapture.FLASH_MODE_AUTO // デフォルトはAUTO
 
-    // ── ライブ検出用 ─────────────────────────────────────────────────────
-    // ── ライブ検出・品質チェック用 ──────────────────────────────────────
-    private var ocrEngine: OcrEngine? = null
+    // ── 品質チェック・センサー用 ──────────────────────────────────────────
+    private var sensorManager: SensorManager? = null
+    private var accelerometer: Sensor? = null
+    private var currentRollAngle: Double = 0.0
+
     private val preprocessor = ImagePreprocessor()
 
     /** バックグラウンド解析用スコープ */
@@ -91,16 +96,38 @@ class CameraActivity : AppCompatActivity() {
         outputDirectory = getOutputDirectory()
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        // OcrEngineをバックグラウンドで初期化（起動時のUIブロックを防ぐ）
-        analysisScope.launch {
-            ocrEngine = OcrEngine(this@CameraActivity)
-            lastAnalysisTimeMs = 0L
-            Log.d(TAG, "OcrEngine 初期化完了（品質検知用）")
-        }
-
+        setupSensors()
         startCamera()
         setupUI()
     }
+
+    private fun setupSensors() {
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        accelerometer?.let {
+            sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        sensorManager?.unregisterListener(this)
+    }
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
+            val ax = event.values[0]
+            val ay = event.values[1]
+            // 加速度からロール角（左右の傾き）を計算 (単位: 度)
+            currentRollAngle = atan2(ax.toDouble(), ay.toDouble()) * (180.0 / PI)
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     private fun setupUI() {
         // 閉じるボタン
@@ -275,7 +302,6 @@ class CameraActivity : AppCompatActivity() {
             return
         }
 
-        val engine = ocrEngine ?: run { imageProxy.close(); return }
 
         isAnalyzing = true
 
@@ -295,20 +321,18 @@ class CameraActivity : AppCompatActivity() {
 
         analysisScope.launch {
             try {
-                // 1. 基本品質チェック（ぼけ）
+                // 1. 品質チェック（傾き: 縦・横どちらでもOK）
+                // 0, 90, 180, 270度付近であれば許容する
+                val angleMod = abs(currentRollAngle % 90.0)
+                val isTilted = angleMod > 15.0 && angleMod < 75.0
+                
+                // 2. 品質チェック（ぼけ）
                 val blurScore = ImageQualityChecker.calculateBlurScore(bitmap)
                 val isBlurred = blurScore < 100.0
 
-                // 2. 文字解析によるチェック（傾き・見切れ）
-                val processed = preprocessor.preprocess(bitmap)
-                val polygons  = engine.detectTextPolygonOnly(processed)
-                
-                val isTilted  = ImageQualityChecker.isTextTilted(polygons)
-                val isCutOff  = ImageQualityChecker.isTextCutOff(polygons, processed.width, processed.height)
-
                 // UIスレッドで警告状態を更新
                 withContext(Dispatchers.Main) {
-                    updateQualityUI(isBlurred, isTilted, isCutOff)
+                    updateQualityUI(isBlurred, isTilted)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "品質解析エラー（無視して継続）: ${e.message}")
@@ -320,11 +344,10 @@ class CameraActivity : AppCompatActivity() {
     }
 
     /** 品質状態に応じてUI（警告メッセージ、ガイド枠の色）を更新する */
-    private fun updateQualityUI(isBlurred: Boolean, isTilted: Boolean, isCutOff: Boolean) {
+    private fun updateQualityUI(isBlurred: Boolean, isTilted: Boolean) {
         val warningText = when {
             isBlurred -> "ぼけています"
-            isTilted  -> "文字が傾いています"
-            isCutOff  -> "文字が端に寄っています"
+            isTilted  -> "傾いています"
             else -> null
         }
 
@@ -332,11 +355,11 @@ class CameraActivity : AppCompatActivity() {
             binding.tvQualityWarning.text = warningText
             binding.tvQualityWarning.visibility = android.view.View.VISIBLE
             // コーナーマークを赤色に
-            binding.guideFrame.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#C62828")) // @color/error
+            binding.guideFrame.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#C62828"))
         } else {
             binding.tvQualityWarning.visibility = android.view.View.GONE
-            // コーナーマークを緑色に（または白色に戻す）
-            binding.guideFrame.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#2E7D32")) // @color/success
+            // コーナーマークを緑色に
+            binding.guideFrame.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#2E7D32"))
         }
     }
 
@@ -387,14 +410,7 @@ class CameraActivity : AppCompatActivity() {
         super.onDestroy()
         cameraExecutor.shutdown()
 
-        // 品質チェック用のコルーチンスコープをキャンセル
+        // 解析用のコルーチンスコープをキャンセル
         analysisScope.cancel()
-
-        // OcrEngineを安全にクローズ
-        val engineToClose = ocrEngine
-        ocrEngine = null
-        Thread {
-            engineToClose?.close()
-        }.also { it.isDaemon = true }.start()
     }
 }
