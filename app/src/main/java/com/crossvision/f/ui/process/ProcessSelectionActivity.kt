@@ -167,6 +167,9 @@ class ProcessSelectionActivity : AppCompatActivity() {
         // 工程一覧の反映（工事に連動）
         viewModel.processes.observe(this) { processes ->
             processList = processes
+            if (processes.isEmpty() && viewModel.selectedConstruction.value != null) {
+                Toast.makeText(this, "この工事に紐付く工程がありません。サーバーの設定を確認してください。", Toast.LENGTH_LONG).show()
+            }
             val adapter = ArrayAdapter(
                 this,
                 android.R.layout.simple_dropdown_item_1line,

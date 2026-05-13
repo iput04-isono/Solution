@@ -131,13 +131,15 @@
         <!-- シャッターボタン -->
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/btnCapture"
-            android:layout_width="@dimen/camera_button_size"
-            android:layout_height="@dimen/camera_button_size"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:src="@android:drawable/ic_menu_camera"
             android:contentDescription="撮影"
             app:backgroundTint="@color/on_primary"
             app:tint="@color/primary"
             app:fabSize="normal"
+            app:fabCustomSize="@dimen/camera_button_size"
+            app:maxImageSize="36dp"
             app:elevation="6dp" />
 
     </LinearLayout>
