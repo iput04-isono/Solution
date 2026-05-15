@@ -182,7 +182,6 @@ class DetectionOverlayView @JvmOverloads constructor(
             val dy = poly[3] * scale - poly[1] * scale
             val angleDegrees = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
 
-            val text = result.displayCode
             if (text.isNotBlank()) {
                 val textX = (poly[0] + poly[2]) / 2f * scale + offsetX
                 val textY = (poly[1] + poly[3]) / 2f * scale + offsetY - 15f
