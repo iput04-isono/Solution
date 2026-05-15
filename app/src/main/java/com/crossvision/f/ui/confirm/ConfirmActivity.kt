@@ -418,6 +418,7 @@ class ConfirmActivity : AppCompatActivity() {
                 adapter.removeItem(position)
                 updateResultCount()
                 updateEmptyState()
+                updateRegisterButton()
             }
             .setNegativeButton("キャンセル", null)
             .show()
