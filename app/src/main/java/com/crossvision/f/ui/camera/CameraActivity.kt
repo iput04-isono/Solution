@@ -85,7 +85,7 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
         private const val FILENAME_FORMAT = "yyyyMMdd_HHmmss"
 
         /** ライブ検出の最小間隔（ms）。前回の解析完了からこの時間以上空けてから次を実行。 */
-        private const val ANALYSIS_INTERVAL_MS = 1000L
+        private const val ANALYSIS_INTERVAL_MS = 300L
     }
 
     /** 最後に解析を完了した時刻（スロットリング用） */

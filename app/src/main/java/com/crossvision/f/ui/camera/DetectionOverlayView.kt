@@ -143,14 +143,25 @@ class DetectionOverlayView @JvmOverloads constructor(
             canvas.drawPath(path, matchOuterPaint)  // 白縁取り
             canvas.drawPath(path, if (isMatched) matchInnerPaint else unmatchInnerPaint)  // 色枠
             
+            // 枠の上辺（左上から右上）の角度を計算してテキストを回転させる
+            val dx = poly[2] * scale - poly[0] * scale
+            val dy = poly[3] * scale - poly[1] * scale
+            val angleDegrees = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
+
             // テキスト描画
             val textX = poly[0] * scale + offsetX
             val textY = poly[1] * scale + offsetY - 10f
             val text = result.displayCode
             val textWidth = textPaint.measureText(text)
             
+            canvas.save()
+            // 左上頂点を軸に回転
+            canvas.rotate(angleDegrees, textX, textY)
+            
             canvas.drawRect(textX, textY - textPaint.textSize, textX + textWidth + 8f, textY + 8f, textBgPaint)
             canvas.drawText(text, textX + 4f, textY, textPaint)
+            
+            canvas.restore()
         }
     }
 }
