@@ -67,6 +67,16 @@
                     android:textColor="@color/text_secondary"
                     android:layout_marginTop="2dp" />
 
+                <TextView
+                    android:id="@+id/tvWarning"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="@dimen/text_small"
+                    android:textColor="@color/error"
+                    android:textStyle="bold"
+                    android:visibility="gone"
+                    android:layout_marginTop="2dp" />
+
             </LinearLayout>
 
             <!-- 編集ボタン -->
