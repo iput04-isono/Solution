@@ -58,7 +58,8 @@ class RecognizeActivity : AppCompatActivity() {
         if (result.resultCode == RESULT_OK) {
             val imagePath = result.data?.getStringExtra("IMAGE_PATH")
             if (imagePath != null) {
-                val bitmap = BitmapFactory.decodeFile(imagePath)
+                // メモリ節約のためサンプリングして読み込み
+                val bitmap = loadSampledBitmap(imagePath)
                 if (bitmap != null) {
                     setPreviewImage(correctExifRotation(bitmap, imagePath))
                 }
@@ -72,6 +73,7 @@ class RecognizeActivity : AppCompatActivity() {
     ) { uri: Uri? ->
         uri?.let { imageUri ->
             try {
+                // ギャラリーからの画像もサンプリングを検討
                 val inputStream = contentResolver.openInputStream(imageUri)
                 val bitmap = BitmapFactory.decodeStream(inputStream)
                 inputStream?.close()
@@ -175,29 +177,62 @@ class RecognizeActivity : AppCompatActivity() {
         binding.progressRecognize.visibility = View.VISIBLE
         binding.btnRecognize.isEnabled = false
 
-        lifecycleScope.launch {
+        // Dispatchers.Default で重い処理（回転・OCR）を実行
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Default) {
             try {
-                // 手動回転を適用してから OCR へ渡す
+                // 手動回転を適用してから OCR へ渡す（バックグラウンドで実行）
                 val inputBitmap = if (manualRotationDegrees != 0f) {
                     val matrix = Matrix().apply { postRotate(manualRotationDegrees) }
                     Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
                 } else {
                     bitmap
                 }
+                
                 val (overlayBitmap, results) = ocrProcessor.recognizeWithOverlay(inputBitmap)
                 val overlayPath = saveOverlayBitmap(overlayBitmap)
-                navigateToConfirm(results, overlayPath)
+                
+                // 画面遷移はメインスレッドで
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    navigateToConfirm(results, overlayPath)
+                }
             } catch (e: Exception) {
-                Toast.makeText(
-                    this@RecognizeActivity,
-                    "認識に失敗しました: ${e.message}",
-                    Toast.LENGTH_LONG
-                ).show()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    Toast.makeText(
+                        this@RecognizeActivity,
+                        "認識に失敗しました: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             } finally {
-                binding.progressRecognize.visibility = View.GONE
-                binding.btnRecognize.isEnabled = true
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    binding.progressRecognize.visibility = View.GONE
+                    binding.btnRecognize.isEnabled = true
+                }
             }
         }
+    }
+
+    /**
+     * 指定されたパスの画像をメモリ節約（サンプリング）しながら読み込む。
+     */
+    private fun loadSampledBitmap(path: String, targetSize: Int = 1600): Bitmap? {
+        val options = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        BitmapFactory.decodeFile(path, options)
+
+        var inSampleSize = 1
+        if (options.outHeight > targetSize || options.outWidth > targetSize) {
+            val halfHeight = options.outHeight / 2
+            val halfWidth = options.outWidth / 2
+            while (halfHeight / inSampleSize >= targetSize && halfWidth / inSampleSize >= targetSize) {
+                inSampleSize *= 2
+            }
+        }
+
+        options.inJustDecodeBounds = false
+        options.inSampleSize = inSampleSize
+        return BitmapFactory.decodeFile(path, options)
     }
 
     /** オーバーレイ画像を一時ファイルに保存してパスを返す */
