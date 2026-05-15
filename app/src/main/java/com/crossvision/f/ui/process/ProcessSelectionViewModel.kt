@@ -52,6 +52,10 @@ class ProcessSelectionViewModel(
     private val _isSyncing = MutableLiveData(false)
     val isSyncing: LiveData<Boolean> = _isSyncing
 
+    // 同期メッセージ（Toast表示用など）
+    private val _syncStatusMessage = MutableLiveData<String?>()
+    val syncStatusMessage: LiveData<String?> = _syncStatusMessage
+
     /**
      * サーバーから最新のマスタデータを取得して同期する
      */
@@ -59,16 +63,35 @@ class ProcessSelectionViewModel(
         _isSyncing.value = true
         viewModelScope.launch {
             try {
+                if (!syncManager.isNetworkAvailable()) {
+                    _syncStatusMessage.value = "ネットワークに接続されていません。オフラインモードで動作します。"
+                    return@launch
+                }
+
                 // 工事・工程の同期
-                syncManager.syncConstructionsAndProcesses()
-                // ついでに製品コードマスターも同期しておく
-                syncManager.syncProductLabels()
+                val constSuccess = syncManager.syncConstructionsAndProcesses()
+                // 製品コードマスターも同期
+                val labelCount = syncManager.syncProductLabels()
+                
+                if (constSuccess) {
+                    _syncStatusMessage.value = "最新データを取得しました。"
+                } else {
+                    _syncStatusMessage.value = "サーバーとの通信に失敗しました。以前のデータを使用します。"
+                }
             } catch (e: Exception) {
                 // エラー時はログ出力のみ（オフライン等の場合があるため）
+                _syncStatusMessage.value = "同期中にエラーが発生しました。接続設定を確認してください。"
             } finally {
                 _isSyncing.value = false
             }
         }
+    }
+
+    /**
+     * メッセージ表示後にクリアするためのメソッド
+     */
+    fun clearSyncStatusMessage() {
+        _syncStatusMessage.value = null
     }
 
     fun selectConstruction(construction: Construction) {

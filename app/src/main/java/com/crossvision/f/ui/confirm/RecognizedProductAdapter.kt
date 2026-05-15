@@ -28,9 +28,13 @@ class RecognizedProductAdapter(
 
     fun getSelectedItems(): List<RecognizedItem> = items.filter { it.isSelected }
 
-    fun updateItem(position: Int, code: String) {
+    fun updateItem(position: Int, code: String, isInMaster: Boolean = true) {
         if (position in items.indices) {
-            items[position] = items[position].copy(productCode = code, isEdited = true)
+            items[position] = items[position].copy(
+                productCode = code,
+                isEdited = true,
+                isInMaster = isInMaster
+            )
             notifyItemChanged(position)
         }
     }
@@ -66,7 +70,14 @@ class RecognizedProductAdapter(
 
         fun bind(item: RecognizedItem, position: Int) {
             binding.tvProductCode.text = item.productCode
-            binding.tvRawText.text = if (item.isEdited) "（手動修正済み）" else "認識テキスト: ${item.rawText}"
+            if (item.isInMaster) {
+                binding.tvProductCode.setTextColor(binding.root.context.getColor(android.R.color.black))
+                binding.tvRawText.text = if (item.isEdited) "（手動修正済み）" else "認識テキスト: ${item.rawText}"
+            } else {
+                // マスターにない場合は色を変えて警告テキストを表示
+                binding.tvProductCode.setTextColor(0xFFF57F17.toInt()) // warning color
+                binding.tvRawText.text = if (item.isEdited) "（手動修正済み・マスター未登録！）" else "認識テキスト: ${item.rawText}（マスター未登録！）"
+            }
             binding.cbSelect.isChecked = item.isSelected
 
             val cropPath = item.cropImagePath
@@ -118,5 +129,6 @@ data class RecognizedItem(
     val rawText: String = "",
     val isSelected: Boolean = true,
     val isEdited: Boolean = false,
-    val cropImagePath: String? = null
+    val cropImagePath: String? = null,
+    val isInMaster: Boolean = true
 )
