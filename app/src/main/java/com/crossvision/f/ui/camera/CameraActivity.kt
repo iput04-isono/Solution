@@ -373,8 +373,8 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
                 // 3. OCR検出と照合
                 // ※本来はisBlurredやisTiltedがtrueの時はスキップしても良いが、今回は常に実行してテスト
                 // リアルタイム性を高めるため、検出する最大ポリゴン数を 5 に制限する
-                // リアルタイム表示は「検出（枠表示）」のみに限定し、パフォーマンスと分離を重視
-                val results = ocrProcessor?.recognizeText(bitmap, maxPolygons = 8, detectOnly = true) ?: emptyList()
+                // リアルタイムでの文字追尾（UX強化）のため、フルOCRを実行
+                val results = ocrProcessor?.recognizeText(bitmap, maxPolygons = 5, detectOnly = false) ?: emptyList()
                 
                 withContext(Dispatchers.Main) {
                     binding.detectionOverlayView.updateResults(
