@@ -46,27 +46,37 @@ class LabelMatcher private constructor(rawLabels: List<String>, source: String) 
         val variants = generateVariants(normOcr)
 
         // 全ラベルに対してスコアを計算
-        val scoredCandidates = normalizedLabels.mapIndexed { idx, normLabel ->
-            // オリジナルのOCR文字と各種バリアント（0/O変換など）の中で最小の距離を採用
+        val allScored = normalizedLabels.mapIndexed { idx, normLabel ->
             val minDist = variants.minOf { editDistance(it, normLabel) }
+            val hasPrefixMatch = variants.any { v ->
+                v.length >= 2 && normLabel.length >= 2 && v.take(2) == normLabel.take(2)
+            }
             
-            // スコア要素: 1.編集距離, 2.文字数差, 3.元の位置(インデックス)
             Candidate(
                 index = idx,
                 distance = minDist,
-                lengthDiff = Math.abs(normOcr.length - normLabel.length)
+                lengthDiff = Math.abs(normOcr.length - normLabel.length),
+                hasPrefixMatch = hasPrefixMatch
             )
         }
 
-        // フィルタとソート
-        val filtered = scoredCandidates
-            .filter { it.distance <= MAX_EDIT_DISTANCE }
+        // ユーザー提案ロジック: 最初2文字が一致する候補があれば、それらを優先的に処理する
+        val prefixMatched = allScored.filter { it.hasPrefixMatch && it.distance <= MAX_EDIT_DISTANCE }
+        val finalCandidates = if (prefixMatched.isNotEmpty()) {
+            prefixMatched
+        } else {
+            allScored.filter { it.distance <= MAX_EDIT_DISTANCE }
+        }
+
+        // ソート
+        val filtered = finalCandidates
             .sortedWith(
                 compareBy<Candidate> { it.distance }       // 第1優先: 編集距離（小）
-                    .thenBy { it.lengthDiff }              // 第2優先: 文字数差（小）
-                    .thenBy { it.index }                   // 第3優先: 元のリスト順（現状維持用）
+                    .thenByDescending { it.hasPrefixMatch } // 第2優先: 接頭辞一致あり
+                    .thenBy { it.lengthDiff }              // 第3優先: 文字数差（小）
+                    .thenBy { it.index }
             )
-            .take(maxResults + 1) // 曖昧さ判定のために1件多めに取る
+            .take(maxResults + 1)
 
         if (filtered.isEmpty()) return emptyList()
 
@@ -94,7 +104,8 @@ class LabelMatcher private constructor(rawLabels: List<String>, source: String) 
     private data class Candidate(
         val index: Int,
         val distance: Int,
-        val lengthDiff: Int
+        val lengthDiff: Int,
+        val hasPrefixMatch: Boolean
     )
 
     /**

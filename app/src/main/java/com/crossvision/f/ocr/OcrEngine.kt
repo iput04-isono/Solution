@@ -461,7 +461,8 @@ class OcrEngine(private val context: Context) {
         val scaleX = outputWidth.toFloat() / DET_SIZE.toFloat()
         val scaleY = outputHeight.toFloat() / DET_SIZE.toFloat()
 
-        return bfsComponents(heatMap, threshold = 0.26f, minPx = 24)
+        // 閾値を 0.26 -> 0.18 に下げて感度を向上（液晶画面や暗い環境への耐性アップ）
+        return bfsComponents(heatMap, threshold = 0.18f, minPx = 15)
             .mapNotNull { comp ->
                 val rr = pcaMinRect(comp) ?: return@mapNotNull null
                 val corners = unclipRect(rr, ratio = 1.5f)
