@@ -98,7 +98,7 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
 
         outputDirectory = getOutputDirectory()
         cameraExecutor = Executors.newSingleThreadExecutor()
-        ocrProcessor = com.crossvision.f.ocr.OcrProcessor(this)
+        ocrProcessor = com.crossvision.f.ocr.OcrProcessor.getInstance(this)
 
         setupSensors()
         startCamera()
@@ -462,7 +462,6 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
         // 解析用のコルーチンスコープをキャンセル
         analysisScope.cancel()
         
-        ocrProcessor?.close()
         ocrProcessor = null
     }
 }

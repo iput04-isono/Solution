@@ -91,7 +91,7 @@ class RecognizeActivity : AppCompatActivity() {
         binding = ActivityRecognizeBinding.inflate(layoutInflater)
         setContentView(binding.root)
         
-        ocrProcessor = OcrProcessor(this)
+        ocrProcessor = OcrProcessor.getInstance(this)
 
         userId = intent.getStringExtra("USER_ID") ?: ""
         constructionName = intent.getStringExtra("CONSTRUCTION_NAME") ?: ""
@@ -287,6 +287,5 @@ class RecognizeActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        ocrProcessor.close()
     }
 }

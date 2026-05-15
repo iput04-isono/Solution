@@ -15,7 +15,18 @@ import java.io.File
  * PaddleOCR (ONNX) を使用したOCR処理クラス
  * OcrEngine.runFullOcr() を呼び出し、オーバーレイ描画・クロップ保存・ラベル照合を行う
  */
-class OcrProcessor(private val context: Context) {
+class OcrProcessor private constructor(private val context: Context) {
+
+    companion object {
+        @Volatile
+        private var instance: OcrProcessor? = null
+
+        fun getInstance(context: Context): OcrProcessor {
+            return instance ?: synchronized(this) {
+                instance ?: OcrProcessor(context.applicationContext).also { instance = it }
+            }
+        }
+    }
 
     private var engine: OcrEngine? = null
     private val preprocessor = ImagePreprocessor()
