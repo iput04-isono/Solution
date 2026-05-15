@@ -195,7 +195,11 @@ class OcrEngine(private val context: Context) {
      * @param originalBitmap カメラまたはギャラリーから取得した入力画像
      * @return [OcrOutput]（有効な認識結果リストと処理時間）
      */
-    fun runFullOcr(originalBitmap: Bitmap, maxPolygons: Int = MAX_POLYGON_REGIONS): OcrOutput {
+    fun runFullOcr(
+        originalBitmap: Bitmap,
+        maxPolygons: Int = MAX_POLYGON_REGIONS,
+        detectOnly: Boolean = false
+    ): OcrOutput {
         val totalStartMs = SystemClock.elapsedRealtime()
 
         // 各フェーズの累積時間カウンタ
@@ -236,7 +240,21 @@ class OcrEngine(private val context: Context) {
         // ── 認識フェーズ（ポリゴンごとにループ） ─────────────────────────
         val items = mutableListOf<OcrDetectionItem>()
 
-        for ((index, polygon) in polygons.withIndex()) {
+        if (detectOnly) {
+            // 検出のみの場合は空のテキスト結果でアイテムを作成（追尾枠用）
+            val emptyBitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ALPHA_8)
+            for ((idx, polygon) in polygons.withIndex()) {
+                items.add(OcrDetectionItem(
+                    index = idx + 1,
+                    rect = polygonToBoundingRect(polygon),
+                    polygon = polygon,
+                    displayBitmap = emptyBitmap,
+                    recognitionBitmap = emptyBitmap,
+                    result = OcrResult(text = "", confidence = 0f)
+                ))
+            }
+        } else {
+            for ((index, polygon) in polygons.withIndex()) {
             // Step 7a: ポリゴンを 1.55 倍に拡大（文字の端が切れないようにするため）
             val cropStartMs = SystemClock.elapsedRealtime()
             val expandedPolygon = expandPolygon(
@@ -291,8 +309,9 @@ class OcrEngine(private val context: Context) {
                 )
             }
         }
+    }
 
-        // otherMs = 計測対象外の処理時間（ループオーバーヘッドなど）
+    // otherMs = 計測対象外の処理時間（ループオーバーヘッドなど）
         val totalMs = SystemClock.elapsedRealtime() - totalStartMs
         val otherMs = (
             totalMs - detectionMs - normalRecognitionMs - rotatedRecognitionMs -

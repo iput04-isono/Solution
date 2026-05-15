@@ -211,8 +211,8 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
             val imageAnalysisBuilder = ImageAnalysis.Builder()
                 // 解析が追いつかない場合は最新フレームだけを保持（キュー溢れ防止）
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                // 解析解像度を下げることでメモリ負荷と計算コストを抑制
-                .setTargetResolution(Size(640, 360))
+                // 解析解像度を上げることで検出精度（枠の安定性）を向上
+                .setTargetResolution(Size(1280, 720))
             
             Camera2Interop.Extender(imageAnalysisBuilder).apply {
                 setCaptureRequestOption(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)
@@ -373,7 +373,8 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
                 // 3. OCR検出と照合
                 // ※本来はisBlurredやisTiltedがtrueの時はスキップしても良いが、今回は常に実行してテスト
                 // リアルタイム性を高めるため、検出する最大ポリゴン数を 5 に制限する
-                val results = ocrProcessor?.recognizeText(bitmap, maxPolygons = 5) ?: emptyList()
+                // リアルタイム表示は「検出（枠表示）」のみに限定し、パフォーマンスと分離を重視
+                val results = ocrProcessor?.recognizeText(bitmap, maxPolygons = 8, detectOnly = true) ?: emptyList()
                 
                 withContext(Dispatchers.Main) {
                     binding.detectionOverlayView.updateResults(

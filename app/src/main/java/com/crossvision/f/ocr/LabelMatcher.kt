@@ -135,7 +135,8 @@ class LabelMatcher private constructor(rawLabels: List<String>, source: String) 
             '1' to 'I', 'I' to '1',
             '5' to 'S', 'S' to '5',
             '8' to 'B', 'B' to '8',
-            '6' to 'G', 'G' to '6',
+            '6' to 'B', // 優先: 手書きのbは6に化けやすい
+            'G' to '6',
             '2' to 'Z', 'Z' to '2',
             '7' to 'T', 'T' to '7',
             '4' to 'A', 'A' to '4'

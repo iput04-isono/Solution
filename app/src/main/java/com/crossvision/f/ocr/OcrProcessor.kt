@@ -35,16 +35,21 @@ class OcrProcessor private constructor(private val context: Context) {
     /**
      * 画像からテキストを認識する
      */
-    suspend fun recognizeText(bitmap: Bitmap, maxPolygons: Int = 12): List<DomainOcrResult> = withContext(Dispatchers.Default) {
+    suspend fun recognizeText(
+        bitmap: Bitmap,
+        maxPolygons: Int = 12,
+        detectOnly: Boolean = false
+    ): List<DomainOcrResult> = withContext(Dispatchers.Default) {
         if (labelMatcher == null) labelMatcher = LabelMatcher.create(context)
         if (engine == null) engine = OcrEngine(context)
 
         val processedImage = preprocessor.preprocess(bitmap)
-        val output = engine!!.runFullOcr(processedImage, maxPolygons)
+        val output = engine!!.runFullOcr(processedImage, maxPolygons, detectOnly)
 
         output.items.mapNotNull { item ->
             val text = item.result.text.trim()
-            if (text.isEmpty()) return@mapNotNull null
+            // 検出のみモードの場合はテキストが空でも処理を継続する
+            if (!detectOnly && text.isEmpty()) return@mapNotNull null
 
             val cleanedCode = ProductCodeValidator.cleanProductCode(text)
             val validation = ProductCodeValidator.validate(cleanedCode)

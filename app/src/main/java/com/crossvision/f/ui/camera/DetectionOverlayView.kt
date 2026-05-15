@@ -59,6 +59,14 @@ class DetectionOverlayView @JvmOverloads constructor(
         strokeCap = Paint.Cap.ROUND
     }
 
+    private val trackingInnerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#03A9F4")   // Cyan (追尾中)
+        style = Paint.Style.STROKE
+        strokeWidth = 5f
+        strokeJoin = Paint.Join.ROUND
+        strokeCap = Paint.Cap.ROUND
+    }
+
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(40, 0, 230, 118)
         style = Paint.Style.FILL
@@ -148,39 +156,54 @@ class DetectionOverlayView @JvmOverloads constructor(
             }
             path.close()
 
+            val text = result.displayCode
             val isMatched = result.matchedLabel != null
-            fillPaint.color = if (isMatched) Color.argb(40, 0, 230, 118) else Color.argb(40, 255, 193, 7)
+            val isTrackingOnly = text.isBlank()
+
+            // 色設定: 一致=緑, 追尾のみ=青(Cyan), 不一致テキストあり=黄
+            fillPaint.color = when {
+                isMatched -> Color.argb(40, 0, 230, 118)
+                isTrackingOnly -> Color.argb(40, 3, 169, 244)
+                else -> Color.argb(40, 255, 193, 7)
+            }
 
             canvas.drawPath(path, fillPaint)   // 半透明塗り
             canvas.drawPath(path, matchOuterPaint)  // 白縁取り
-            canvas.drawPath(path, if (isMatched) matchInnerPaint else unmatchInnerPaint)  // 色枠
+            
+            val innerPaint = when {
+                isMatched -> matchInnerPaint
+                isTrackingOnly -> trackingInnerPaint
+                else -> unmatchInnerPaint
+            }
+            canvas.drawPath(path, innerPaint)  // 色枠
             
             // 枠の上辺の角度
             val dx = poly[2] * scale - poly[0] * scale
             val dy = poly[3] * scale - poly[1] * scale
             val angleDegrees = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
 
-            // テキスト描画を枠の上辺の中央に配置
-            val textX = (poly[0] + poly[2]) / 2f * scale + offsetX
-            val textY = (poly[1] + poly[3]) / 2f * scale + offsetY - 15f
-            
             val text = result.displayCode
-            val textWidth = textPaint.measureText(text)
-            
-            canvas.save()
-            // 上辺の中央を軸に回転
-            canvas.rotate(angleDegrees, textX, textY)
-            
-            // 背景矩形（中央揃え）
-            canvas.drawRect(textX - textWidth / 2f - 8f, textY - textPaint.textSize, textX + textWidth / 2f + 8f, textY + 8f, textBgPaint)
-            
-            // テキスト描画（中央揃えに変更）
-            textPaint.textAlign = Paint.Align.CENTER
-            canvas.drawText(text, textX, textY, textPaint)
-            // ペイントを元に戻す
-            textPaint.textAlign = Paint.Align.LEFT
-            
-            canvas.restore()
+            if (text.isNotBlank()) {
+                val textX = (poly[0] + poly[2]) / 2f * scale + offsetX
+                val textY = (poly[1] + poly[3]) / 2f * scale + offsetY - 15f
+                
+                val textWidth = textPaint.measureText(text)
+                
+                canvas.save()
+                // 上辺の中央を軸に回転
+                canvas.rotate(angleDegrees, textX, textY)
+                
+                // 背景矩形（中央揃え）
+                canvas.drawRect(textX - textWidth / 2f - 8f, textY - textPaint.textSize, textX + textWidth / 2f + 8f, textY + 8f, textBgPaint)
+                
+                // テキスト描画（中央揃えに変更）
+                textPaint.textAlign = Paint.Align.CENTER
+                canvas.drawText(text, textX, textY, textPaint)
+                // ペイントを元に戻す
+                textPaint.textAlign = Paint.Align.LEFT
+                
+                canvas.restore()
+            }
         }
     }
 }
