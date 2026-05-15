@@ -128,7 +128,6 @@ class ProcessSelectionActivity : AppCompatActivity() {
 
         // 再読み込みボタン
         binding.btnReload.setOnClickListener {
-            Toast.makeText(this, "最新データを取得しています...", Toast.LENGTH_SHORT).show()
             viewModel.syncMasterData()
             // UI状態のリセット
             binding.actvConstruction.setText("", false)
@@ -151,6 +150,14 @@ class ProcessSelectionActivity : AppCompatActivity() {
         viewModel.isSyncing.observe(this) { isSyncing ->
             binding.progressSync.visibility = if (isSyncing) View.VISIBLE else View.GONE
             binding.btnReload.isEnabled = !isSyncing
+        }
+
+        // 同期メッセージの表示
+        viewModel.syncStatusMessage.observe(this) { message ->
+            if (message != null) {
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+                viewModel.clearSyncStatusMessage()
+            }
         }
 
         // 工事一覧の反映

@@ -21,6 +21,9 @@ import android.graphics.PointF
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import java.io.File
+import androidx.lifecycle.lifecycleScope
+import com.crossvision.f.data.repository.AppRepository
+import kotlinx.coroutines.launch
 
 /**
  * 認識結果確認画面
@@ -34,6 +37,9 @@ class ConfirmActivity : AppCompatActivity() {
     private var processName = ""
     private var userId = ""
     private var overlayBitmap: android.graphics.Bitmap? = null
+    
+    private lateinit var repository: AppRepository
+    private var masterProductCodes = setOf<String>()
 
     // ズーム・パン用
     private var imageMatrix = Matrix()
@@ -82,10 +88,28 @@ class ConfirmActivity : AppCompatActivity() {
 
         setupToolbar()
         setupOverlayImage(overlayPath)
-        setupRecyclerView(productCodes, rawTexts, debugInfo, cropPaths)
+        
+        repository = AppRepository(this)
+        loadMasterData {
+            setupRecyclerView(productCodes, rawTexts, debugInfo, cropPaths)
+        }
+        
         setupUnmatchedSection(unmatchedTexts)
         updateProcessInfoUI()
         setupUI()
+    }
+
+    private fun loadMasterData(onComplete: () -> Unit) {
+        lifecycleScope.launch {
+            try {
+                val labels = repository.getAllProductLabels()
+                masterProductCodes = labels.map { it.code }.toSet()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                onComplete()
+            }
+        }
     }
 
     private fun updateProcessInfoUI() {
@@ -308,7 +332,8 @@ class ConfirmActivity : AppCompatActivity() {
             RecognizedItem(
                 productCode = code,
                 rawText = displayRaw,
-                cropImagePath = cropPath
+                cropImagePath = cropPath,
+                isInMaster = masterProductCodes.contains(code)
             )
         }
         adapter.setItems(items)
@@ -360,7 +385,19 @@ class ConfirmActivity : AppCompatActivity() {
                 val newCode = editText.text.toString().trim()
                 val validation = ProductCodeValidator.validate(newCode)
                 if (validation.isValid) {
-                    adapter.updateItem(position, newCode)
+                    val isInMaster = masterProductCodes.contains(newCode)
+                    if (!isInMaster) {
+                        AlertDialog.Builder(this)
+                            .setTitle("マスター未登録の警告")
+                            .setMessage("入力された製品コード「$newCode」はマスターに登録されていません。\nこのまま保存しますか？")
+                            .setPositiveButton("はい") { _, _ ->
+                                adapter.updateItem(position, newCode, false)
+                            }
+                            .setNegativeButton("いいえ", null)
+                            .show()
+                    } else {
+                        adapter.updateItem(position, newCode, true)
+                    }
                 } else {
                     AlertDialog.Builder(this)
                         .setTitle("入力エラー")
@@ -401,15 +438,30 @@ class ConfirmActivity : AppCompatActivity() {
                 val validation = ProductCodeValidator.validate(cleaned)
 
                 if (validation.isValid) {
-                    adapter.addItem(
-                        RecognizedItem(
-                            productCode = cleaned,
-                            rawText = code,
-                            isEdited = true
+                    val isInMaster = masterProductCodes.contains(cleaned)
+                    val action = {
+                        adapter.addItem(
+                            RecognizedItem(
+                                productCode = cleaned,
+                                rawText = code,
+                                isEdited = true,
+                                isInMaster = isInMaster
+                            )
                         )
-                    )
-                    updateResultCount()
-                    updateEmptyState()
+                        updateResultCount()
+                        updateEmptyState()
+                    }
+
+                    if (!isInMaster) {
+                        AlertDialog.Builder(this)
+                            .setTitle("マスター未登録の警告")
+                            .setMessage("入力された製品コード「$cleaned」はマスターに登録されていません。\nこのまま追加しますか？")
+                            .setPositiveButton("はい") { _, _ -> action() }
+                            .setNegativeButton("いいえ", null)
+                            .show()
+                    } else {
+                        action()
+                    }
                 } else {
                     AlertDialog.Builder(this)
                         .setTitle("入力エラー")

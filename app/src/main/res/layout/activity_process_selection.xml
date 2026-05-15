@@ -95,7 +95,7 @@
                     android:layout_marginStart="@dimen/spacing_xs"
                     android:src="@drawable/ic_logout"
                     android:background="?attr/selectableItemBackgroundBorderless"
-                    app:tint="@color/text_secondary"
+                    app:tint="@color/error"
                     android:contentDescription="ログアウト" />
 
             </LinearLayout>
