@@ -12,6 +12,12 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- リアルタイムOCR検出結果描画用オーバーレイ -->
+    <com.crossvision.f.ui.camera.DetectionOverlayView
+        android:id="@+id/detectionOverlayView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
     <!-- ピント合わせ時の枠（初期非表示） -->
     <View
         android:id="@+id/focusIndicator"

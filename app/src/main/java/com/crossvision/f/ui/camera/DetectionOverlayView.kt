@@ -25,8 +25,8 @@ class DetectionOverlayView @JvmOverloads constructor(
 
     // ── 描画用データ ──────────────────────────────────────────────────────
 
-    /** 前処理画像座標系のポリゴンリスト */
-    private var polygons: List<FloatArray> = emptyList()
+    /** 認識結果リスト */
+    private var results: List<com.crossvision.f.ocr.DomainOcrResult> = emptyList()
 
     /** 前処理画像の幅（座標変換に使用） */
     private var imageWidth: Int = 1
@@ -35,7 +35,7 @@ class DetectionOverlayView @JvmOverloads constructor(
 
     // ── ペイント ──────────────────────────────────────────────────────────
 
-    private val outerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val matchOuterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         style = Paint.Style.STROKE
         strokeWidth = 6f
@@ -43,8 +43,16 @@ class DetectionOverlayView @JvmOverloads constructor(
         strokeCap = Paint.Cap.ROUND
     }
 
-    private val innerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.rgb(0, 230, 118)   // マテリアルグリーン A400
+    private val matchInnerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(0, 230, 118)   // マテリアルグリーン A400 (一致)
+        style = Paint.Style.STROKE
+        strokeWidth = 5f
+        strokeJoin = Paint.Join.ROUND
+        strokeCap = Paint.Cap.ROUND
+    }
+
+    private val unmatchInnerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(255, 193, 7)   // アンバー (未一致)
         style = Paint.Style.STROKE
         strokeWidth = 5f
         strokeJoin = Paint.Join.ROUND
@@ -52,8 +60,18 @@ class DetectionOverlayView @JvmOverloads constructor(
     }
 
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        // 半透明の緑塗り
         color = Color.argb(40, 0, 230, 118)
+        style = Paint.Style.FILL
+    }
+    
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textSize = 36f
+        typeface = android.graphics.Typeface.DEFAULT_BOLD
+    }
+    
+    private val textBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(180, 0, 0, 0)
         style = Paint.Style.FILL
     }
 
@@ -67,20 +85,20 @@ class DetectionOverlayView @JvmOverloads constructor(
      * @param imageWidth  前処理画像の幅（px）
      * @param imageHeight 前処理画像の高さ（px）
      */
-    fun updatePolygons(
-        polygons: List<FloatArray>,
+    fun updateResults(
+        results: List<com.crossvision.f.ocr.DomainOcrResult>,
         imageWidth: Int,
         imageHeight: Int
     ) {
-        this.polygons = polygons
+        this.results = results
         this.imageWidth = imageWidth.coerceAtLeast(1)
         this.imageHeight = imageHeight.coerceAtLeast(1)
         postInvalidate()
     }
 
-    /** 全ポリゴンをクリアする */
-    fun clearPolygons() {
-        polygons = emptyList()
+    /** 全描画をクリアする */
+    fun clearResults() {
+        results = emptyList()
         postInvalidate()
     }
 
@@ -88,7 +106,7 @@ class DetectionOverlayView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        if (polygons.isEmpty()) return
+        if (results.isEmpty()) return
 
         val viewW = width.toFloat()
         val viewH = height.toFloat()
@@ -107,7 +125,8 @@ class DetectionOverlayView @JvmOverloads constructor(
         val offsetX = (viewW - scaledW) / 2f
         val offsetY = (viewH - scaledH) / 2f
 
-        for (poly in polygons) {
+        for (result in results) {
+            val poly = result.polygon ?: continue
             if (poly.size < 8) continue
 
             val path = Path()
@@ -117,9 +136,21 @@ class DetectionOverlayView @JvmOverloads constructor(
             }
             path.close()
 
+            val isMatched = result.matchedLabel != null
+            fillPaint.color = if (isMatched) Color.argb(40, 0, 230, 118) else Color.argb(40, 255, 193, 7)
+
             canvas.drawPath(path, fillPaint)   // 半透明塗り
-            canvas.drawPath(path, outerPaint)  // 白縁取り
-            canvas.drawPath(path, innerPaint)  // 緑枠
+            canvas.drawPath(path, matchOuterPaint)  // 白縁取り
+            canvas.drawPath(path, if (isMatched) matchInnerPaint else unmatchInnerPaint)  // 色枠
+            
+            // テキスト描画
+            val textX = poly[0] * scale + offsetX
+            val textY = poly[1] * scale + offsetY - 10f
+            val text = result.displayCode
+            val textWidth = textPaint.measureText(text)
+            
+            canvas.drawRect(textX, textY - textPaint.textSize, textX + textWidth + 8f, textY + 8f, textBgPaint)
+            canvas.drawText(text, textX + 4f, textY, textPaint)
         }
     }
 }

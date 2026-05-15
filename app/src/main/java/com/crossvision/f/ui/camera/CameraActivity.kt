@@ -68,6 +68,7 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
     private var currentRollAngle: Double = 0.0
 
     private val preprocessor = ImagePreprocessor()
+    private var ocrProcessor: com.crossvision.f.ocr.OcrProcessor? = null
 
     /** バックグラウンド解析用スコープ */
     private val analysisScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -97,6 +98,7 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
 
         outputDirectory = getOutputDirectory()
         cameraExecutor = Executors.newSingleThreadExecutor()
+        ocrProcessor = com.crossvision.f.ocr.OcrProcessor(this)
 
         setupSensors()
         startCamera()
@@ -367,6 +369,19 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
                 withContext(Dispatchers.Main) {
                     updateQualityUI(isBlurred, isTilted)
                 }
+
+                // 3. OCR検出と照合
+                // ※本来はisBlurredやisTiltedがtrueの時はスキップしても良いが、今回は常に実行してテスト
+                val results = ocrProcessor?.recognizeText(bitmap) ?: emptyList()
+                
+                withContext(Dispatchers.Main) {
+                    binding.detectionOverlayView.updateResults(
+                        results,
+                        bitmap.width,
+                        bitmap.height
+                    )
+                }
+
             } catch (e: Exception) {
                 Log.w(TAG, "品質解析エラー（無視して継続）: ${e.message}")
             } finally {
@@ -445,5 +460,8 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
 
         // 解析用のコルーチンスコープをキャンセル
         analysisScope.cancel()
+        
+        ocrProcessor?.close()
+        ocrProcessor = null
     }
 }
