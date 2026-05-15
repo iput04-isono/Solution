@@ -1,6 +1,7 @@
 package com.crossvision.f.ui.confirm
 
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -28,10 +29,10 @@ class RecognizedProductAdapter(
 
     fun getSelectedItems(): List<RecognizedItem> = items.filter { it.isSelected }
 
-    fun updateItem(position: Int, code: String, isInMaster: Boolean = true) {
+    fun updateItem(position: Int, code: String, isInMaster: Boolean) {
         if (position in items.indices) {
             items[position] = items[position].copy(
-                productCode = code,
+                productCode = code, 
                 isEdited = true,
                 isInMaster = isInMaster
             )
@@ -70,23 +71,22 @@ class RecognizedProductAdapter(
 
         fun bind(item: RecognizedItem, position: Int) {
             binding.tvProductCode.text = item.productCode
-            if (item.isInMaster) {
-                binding.tvProductCode.setTextColor(binding.root.context.getColor(android.R.color.black))
-                binding.tvRawText.text = if (item.isEdited) "（手動修正済み）" else "認識テキスト: ${item.rawText}"
-            } else {
-                // マスターにない場合は色を変えて警告テキストを表示
-                binding.tvProductCode.setTextColor(0xFFF57F17.toInt()) // warning color
-                binding.tvRawText.text = if (item.isEdited) "（手動修正済み・マスター未登録！）" else "認識テキスト: ${item.rawText}（マスター未登録！）"
-            }
+            binding.tvRawText.text = if (item.isEdited) "（手動修正済み）" else "認識テキスト: ${item.rawText}"
             binding.cbSelect.isChecked = item.isSelected
+
+            // マスター未登録時の警告表示
+            if (!item.isInMaster) {
+                binding.root.setCardBackgroundColor(Color.parseColor("#FFF4E5")) // 薄いオレンジ
+                binding.tvWarning.visibility = View.VISIBLE
+                binding.tvWarning.text = "⚠️ マスター未登録！"
+            } else {
+                binding.root.setCardBackgroundColor(Color.WHITE)
+                binding.tvWarning.visibility = View.GONE
+            }
 
             val cropPath = item.cropImagePath
             if (cropPath != null) {
-                // クロップ画像も念のためリサイズして読み込む（メモリ節約）
-                val options = BitmapFactory.Options().apply {
-                    inSampleSize = 1 // クロップ画像は通常小さいので1で良いが、念のためオプションを指定
-                }
-                val bmp = BitmapFactory.decodeFile(cropPath, options)
+                val bmp = BitmapFactory.decodeFile(cropPath)
                 if (bmp != null) {
                     binding.ivCrop.setImageBitmap(bmp)
                     binding.ivCrop.visibility = View.VISIBLE
@@ -98,25 +98,12 @@ class RecognizedProductAdapter(
             }
 
             binding.cbSelect.setOnCheckedChangeListener { _, isChecked ->
-                val pos = adapterPosition
-                if (pos != RecyclerView.NO_POSITION) {
-                    items[pos] = items[pos].copy(isSelected = isChecked)
-                    onSelectionChanged(pos, isChecked)
-                }
+                items[position] = items[position].copy(isSelected = isChecked)
+                onSelectionChanged(position, isChecked)
             }
 
-            binding.btnEdit.setOnClickListener {
-                val pos = adapterPosition
-                if (pos != RecyclerView.NO_POSITION) {
-                    onEditClick(pos)
-                }
-            }
-            binding.btnDelete.setOnClickListener {
-                val pos = adapterPosition
-                if (pos != RecyclerView.NO_POSITION) {
-                    onDeleteClick(pos)
-                }
-            }
+            binding.btnEdit.setOnClickListener { onEditClick(position) }
+            binding.btnDelete.setOnClickListener { onDeleteClick(position) }
         }
     }
 }

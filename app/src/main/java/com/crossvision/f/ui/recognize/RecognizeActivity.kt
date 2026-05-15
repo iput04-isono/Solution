@@ -156,12 +156,8 @@ class RecognizeActivity : AppCompatActivity() {
         binding.ivPreview.setImageBitmap(bitmap)
         binding.ivPreview.visibility = View.VISIBLE
         binding.placeholderLayout.visibility = View.GONE
-        
-        // 回転・認識ボタンを有効化
-        binding.rotationLayout.isEnabled = true
-        binding.rotationLayout.alpha = 1.0f
-        binding.btnRecognize.isEnabled = true
-        binding.btnRecognize.alpha = 1.0f
+        binding.rotationLayout.visibility = View.VISIBLE
+        binding.btnRecognize.visibility = View.VISIBLE
     }
 
     /** 手動回転角を適用してプレビューを更新する */
