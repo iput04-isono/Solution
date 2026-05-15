@@ -72,6 +72,7 @@ class RecognizedProductAdapter(
         fun bind(item: RecognizedItem, position: Int) {
             binding.tvProductCode.text = item.productCode
             binding.tvRawText.text = if (item.isEdited) "（手動修正済み）" else "認識テキスト: ${item.rawText}"
+            binding.cbSelect.setOnCheckedChangeListener(null) // 再利用時の意図しない発火を防止
             binding.cbSelect.isChecked = item.isSelected
 
             // マスター未登録時の警告表示
@@ -98,12 +99,25 @@ class RecognizedProductAdapter(
             }
 
             binding.cbSelect.setOnCheckedChangeListener { _, isChecked ->
-                items[position] = items[position].copy(isSelected = isChecked)
-                onSelectionChanged(position, isChecked)
+                val pos = bindingAdapterPosition
+                if (pos != RecyclerView.NO_POSITION) {
+                    items[pos] = items[pos].copy(isSelected = isChecked)
+                    onSelectionChanged(pos, isChecked)
+                }
             }
 
-            binding.btnEdit.setOnClickListener { onEditClick(position) }
-            binding.btnDelete.setOnClickListener { onDeleteClick(position) }
+            binding.btnEdit.setOnClickListener {
+                val pos = bindingAdapterPosition
+                if (pos != RecyclerView.NO_POSITION) {
+                    onEditClick(pos)
+                }
+            }
+            binding.btnDelete.setOnClickListener {
+                val pos = bindingAdapterPosition
+                if (pos != RecyclerView.NO_POSITION) {
+                    onDeleteClick(pos)
+                }
+            }
         }
     }
 }
