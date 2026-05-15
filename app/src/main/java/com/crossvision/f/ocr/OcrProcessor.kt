@@ -40,16 +40,14 @@ class OcrProcessor(private val context: Context) {
             val match = labelMatcher!!.findBest(cleanedCode)
             val topCandidates = labelMatcher!!.findTopCandidates(cleanedCode, maxResults = 3)
 
-            if (match == null) return@mapNotNull null
-
             DomainOcrResult(
                 rawText = text,
                 cleanedCode = cleanedCode,
                 confidence = item.result.confidence,
                 isValid = validation.isValid,
-                matchedLabel = match.label,
-                matchDistance = match.distance,
-                isExactMatch = match.isExactMatch,
+                matchedLabel = match?.label,
+                matchDistance = match?.distance ?: Int.MAX_VALUE,
+                isExactMatch = match?.isExactMatch ?: false,
                 labelCandidates = topCandidates.map { it.label },
                 polygon = item.polygon
             )
