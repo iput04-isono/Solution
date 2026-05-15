@@ -24,12 +24,12 @@ class OcrProcessor(private val context: Context) {
     /**
      * 画像からテキストを認識する
      */
-    suspend fun recognizeText(bitmap: Bitmap): List<DomainOcrResult> = withContext(Dispatchers.Default) {
+    suspend fun recognizeText(bitmap: Bitmap, maxPolygons: Int = 12): List<DomainOcrResult> = withContext(Dispatchers.Default) {
         if (labelMatcher == null) labelMatcher = LabelMatcher.create(context)
         if (engine == null) engine = OcrEngine(context)
 
         val processedImage = preprocessor.preprocess(bitmap)
-        val output = engine!!.runFullOcr(processedImage)
+        val output = engine!!.runFullOcr(processedImage, maxPolygons)
 
         output.items.mapNotNull { item ->
             val text = item.result.text.trim()

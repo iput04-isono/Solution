@@ -195,7 +195,7 @@ class OcrEngine(private val context: Context) {
      * @param originalBitmap カメラまたはギャラリーから取得した入力画像
      * @return [OcrOutput]（有効な認識結果リストと処理時間）
      */
-    fun runFullOcr(originalBitmap: Bitmap): OcrOutput {
+    fun runFullOcr(originalBitmap: Bitmap, maxPolygons: Int = MAX_POLYGON_REGIONS): OcrOutput {
         val totalStartMs = SystemClock.elapsedRealtime()
 
         // 各フェーズの累積時間カウンタ
@@ -226,7 +226,8 @@ class OcrEngine(private val context: Context) {
         val polygons = detectTextPolygons(
             bitmap = detectionBitmap,
             outputWidth = originalBitmap.width,
-            outputHeight = originalBitmap.height
+            outputHeight = originalBitmap.height,
+            maxPolygons = maxPolygons
         )
         val detectionModelAndPostprocessMs = SystemClock.elapsedRealtime() - detectionModelStartMs
 
@@ -451,7 +452,8 @@ class OcrEngine(private val context: Context) {
     private fun detectTextPolygons(
         bitmap: Bitmap,
         outputWidth: Int,
-        outputHeight: Int
+        outputHeight: Int,
+        maxPolygons: Int = MAX_POLYGON_REGIONS
     ): List<FloatArray> {
         val heatMap = runDetectionModel(bitmap) ?: return emptyList()
 
@@ -470,7 +472,7 @@ class OcrEngine(private val context: Context) {
             }
             .filter { polygonArea(it) > 120f }          // 微小領域（ノイズ）を除外
             .sortedByDescending { polygonArea(it) }      // 大きい領域を優先
-            .take(MAX_POLYGON_REGIONS)                   // 最大 24 件
+            .take(maxPolygons)                           // 最大件数
     }
 
     /**

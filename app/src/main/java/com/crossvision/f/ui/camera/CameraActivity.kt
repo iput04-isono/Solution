@@ -85,7 +85,7 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
         private const val FILENAME_FORMAT = "yyyyMMdd_HHmmss"
 
         /** ライブ検出の最小間隔（ms）。前回の解析完了からこの時間以上空けてから次を実行。 */
-        private const val ANALYSIS_INTERVAL_MS = 300L
+        private const val ANALYSIS_INTERVAL_MS = 0L
     }
 
     /** 最後に解析を完了した時刻（スロットリング用） */
@@ -372,7 +372,8 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
 
                 // 3. OCR検出と照合
                 // ※本来はisBlurredやisTiltedがtrueの時はスキップしても良いが、今回は常に実行してテスト
-                val results = ocrProcessor?.recognizeText(bitmap) ?: emptyList()
+                // リアルタイム性を高めるため、検出する最大ポリゴン数を 3 に制限する
+                val results = ocrProcessor?.recognizeText(bitmap, maxPolygons = 3) ?: emptyList()
                 
                 withContext(Dispatchers.Main) {
                     binding.detectionOverlayView.updateResults(
