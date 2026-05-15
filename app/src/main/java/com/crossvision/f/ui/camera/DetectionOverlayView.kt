@@ -126,8 +126,20 @@ class DetectionOverlayView @JvmOverloads constructor(
         val offsetY = (viewH - scaledH) / 2f
 
         for (result in results) {
-            val poly = result.polygon ?: continue
-            if (poly.size < 8) continue
+            val originalPoly = result.polygon ?: continue
+            if (originalPoly.size < 8) continue
+
+            // 枠が広すぎるのを防ぐため、重心基準で少し縮小（OcrEngine で 1.55 倍に拡大されているため、それを緩和）
+            var cx = 0f; var cy = 0f
+            for (i in 0 until 4) { cx += originalPoly[i * 2]; cy += originalPoly[i * 2 + 1] }
+            cx /= 4f; cy /= 4f
+
+            val shrinkScale = 0.7f // 1.55倍を元に戻す程度（約1.1倍相当）
+            val poly = FloatArray(8)
+            for (i in 0 until 4) {
+                poly[i * 2] = cx + (originalPoly[i * 2] - cx) * shrinkScale
+                poly[i * 2 + 1] = cy + (originalPoly[i * 2 + 1] - cy) * shrinkScale
+            }
 
             val path = Path()
             path.moveTo(poly[0] * scale + offsetX, poly[1] * scale + offsetY)
@@ -143,23 +155,30 @@ class DetectionOverlayView @JvmOverloads constructor(
             canvas.drawPath(path, matchOuterPaint)  // 白縁取り
             canvas.drawPath(path, if (isMatched) matchInnerPaint else unmatchInnerPaint)  // 色枠
             
-            // 枠の上辺（左上から右上）の角度を計算してテキストを回転させる
+            // 枠の上辺の角度
             val dx = poly[2] * scale - poly[0] * scale
             val dy = poly[3] * scale - poly[1] * scale
             val angleDegrees = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
 
-            // テキスト描画
-            val textX = poly[0] * scale + offsetX
-            val textY = poly[1] * scale + offsetY - 10f
+            // テキスト描画を枠の上辺の中央に配置
+            val textX = (poly[0] + poly[2]) / 2f * scale + offsetX
+            val textY = (poly[1] + poly[3]) / 2f * scale + offsetY - 15f
+            
             val text = result.displayCode
             val textWidth = textPaint.measureText(text)
             
             canvas.save()
-            // 左上頂点を軸に回転
+            // 上辺の中央を軸に回転
             canvas.rotate(angleDegrees, textX, textY)
             
-            canvas.drawRect(textX, textY - textPaint.textSize, textX + textWidth + 8f, textY + 8f, textBgPaint)
-            canvas.drawText(text, textX + 4f, textY, textPaint)
+            // 背景矩形（中央揃え）
+            canvas.drawRect(textX - textWidth / 2f - 8f, textY - textPaint.textSize, textX + textWidth / 2f + 8f, textY + 8f, textBgPaint)
+            
+            // テキスト描画（中央揃えに変更）
+            textPaint.textAlign = Paint.Align.CENTER
+            canvas.drawText(text, textX, textY, textPaint)
+            // ペイントを元に戻す
+            textPaint.textAlign = Paint.Align.LEFT
             
             canvas.restore()
         }
