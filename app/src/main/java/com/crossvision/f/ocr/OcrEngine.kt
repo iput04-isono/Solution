@@ -243,7 +243,7 @@ class OcrEngine(private val context: Context) {
                 polygon = polygon,
                 imageWidth = originalBitmap.width,
                 imageHeight = originalBitmap.height,
-                scale = 1.55f
+                scale = 1.6f
             )
 
             val boundingRect = polygonToBoundingRect(expandedPolygon)

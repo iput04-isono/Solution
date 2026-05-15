@@ -45,6 +45,6 @@ class ImagePreprocessor {
          * 解像度を上げることで認識モデルへ渡すクロップ画像の品質を改善する。
          * 検出モデルは常に640pxで動作するが、認識モデルはこの解像度の画像を参照する。
          */
-        const val MAX_SIZE = 1280
+        const val MAX_SIZE = 1600
     }
 }
