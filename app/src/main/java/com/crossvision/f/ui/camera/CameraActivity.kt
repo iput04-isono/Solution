@@ -473,9 +473,6 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
         )
     }
 
-    /**
-     * 保存された画像を読み込み、プレビューの guideFrame に合わせてクロップして上書き保存する。
-     */
     private fun cropImageToGuideFrame(photoFile: File): Boolean {
         try {
             val filePath = photoFile.absolutePath
@@ -500,15 +497,20 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
             val isImagePortrait = correctedBitmap.height > correctedBitmap.width
 
             if (isViewPortrait != isImagePortrait) {
-                // 向きが一致しない場合、カメラの物理的な配置特性（通常90度回転）に合わせて回転させる
+                // 向きが一致しない場合、カメラの物理的なセンサー配置角度に合わせて回転させる
                 val matrix = Matrix()
+                
+                // センサーの回転角度を取得（デフォルトは90度）
+                val sensorRotation = cameraInfo?.sensorRotationDegrees ?: 90
+                
                 if (isViewPortrait) {
-                    // プレビューが縦長で画像が横長の場合、時計回りに90度回転
-                    matrix.postRotate(90f)
+                    // プレビューが縦長で画像が横長の場合、センサー回転角に合わせて回転
+                    matrix.postRotate(sensorRotation.toFloat())
                 } else {
-                    // プレビューが横長で画像が縦長の場合、反時計回りに90度回転（270度）
-                    matrix.postRotate(-90f)
+                    // プレビューが横長で画像が縦長の場合
+                    matrix.postRotate(-sensorRotation.toFloat())
                 }
+                
                 val rotated = Bitmap.createBitmap(
                     correctedBitmap, 0, 0,
                     correctedBitmap.width, correctedBitmap.height,
@@ -557,7 +559,17 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
                 croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 95, fos)
             }
 
-            // 9. メモリ解放
+            // 9. 保存したファイルのEXIF回転情報を明示的にNORMAL（回転なし）にリセット
+            // これにより呼び出し元のActivityでの2重回転を防ぐ
+            try {
+                val exif = ExifInterface(filePath)
+                exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
+                exif.saveAttributes()
+            } catch (e: Exception) {
+                Log.w(TAG, "EXIF回転情報のリセットに失敗しました", e)
+            }
+
+            // 10. メモリ解放
             if (correctedBitmap != originalBitmap) correctedBitmap.recycle()
             originalBitmap.recycle()
             croppedBitmap.recycle()
