@@ -98,6 +98,9 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
         binding = ActivityCameraBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // プレビューのスケールタイプをFILL_CENTERに強制固定
+        binding.previewView.scaleType = androidx.camera.view.PreviewView.ScaleType.FILL_CENTER
+
         outputDirectory = getOutputDirectory()
         cameraExecutor = Executors.newSingleThreadExecutor()
         ocrProcessor = com.crossvision.f.ocr.OcrProcessor.getInstance(this)
@@ -522,10 +525,20 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
                 correctedBitmap = rotated
             }
 
+            // プレビューの画面上での左上座標を取得
+            val previewLoc = IntArray(2)
+            binding.previewView.getLocationOnScreen(previewLoc)
+            
+            // ガイド枠の画面上での左上座標を取得
+            val guideLoc = IntArray(2)
+            binding.guideFrame.getLocationOnScreen(guideLoc)
+            
+            // プレビュー表示領域に対するガイド枠の相対位置を計算
+            val guideL = (guideLoc[0] - previewLoc[0]).toFloat()
+            val guideT = (guideLoc[1] - previewLoc[1]).toFloat()
+
             val guideW = binding.guideFrame.width.toFloat()
             val guideH = binding.guideFrame.height.toFloat()
-            val guideL = (viewW - guideW) / 2f
-            val guideT = (viewH - guideH) / 2f
 
             // 4. 画像のサイズを取得
             val imgW = correctedBitmap.width.toFloat()
