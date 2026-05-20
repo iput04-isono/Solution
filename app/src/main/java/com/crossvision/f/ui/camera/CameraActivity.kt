@@ -474,10 +474,13 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
 
     private fun cropPreviewBitmapToGuideFrame(previewBitmap: Bitmap, photoFile: File): Boolean {
         try {
-            // previewBitmap は PreviewView と同じサイズのはずだが、念のためサイズを確認
-            val viewW = binding.previewView.width
-            val viewH = binding.previewView.height
-            if (viewW <= 0 || viewH <= 0 || previewBitmap.width <= 0 || previewBitmap.height <= 0) {
+            // previewBitmap は PreviewView と同じサイズとは限らない（元の解像度を保持するため）
+            val viewW = binding.previewView.width.toFloat()
+            val viewH = binding.previewView.height.toFloat()
+            val imgW = previewBitmap.width.toFloat()
+            val imgH = previewBitmap.height.toFloat()
+
+            if (viewW <= 0f || viewH <= 0f || imgW <= 0f || imgH <= 0f) {
                 previewBitmap.recycle()
                 return false
             }
@@ -490,19 +493,23 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
             binding.guideFrame.getLocationOnScreen(guideLoc)
             
             // PreviewView内での相対座標
-            val guideL = guideLoc[0] - previewLoc[0]
-            val guideT = guideLoc[1] - previewLoc[1]
-            val guideW = binding.guideFrame.width
-            val guideH = binding.guideFrame.height
+            val guideL = (guideLoc[0] - previewLoc[0]).toFloat()
+            val guideT = (guideLoc[1] - previewLoc[1]).toFloat()
+            val guideW = binding.guideFrame.width.toFloat()
+            val guideH = binding.guideFrame.height.toFloat()
 
-            // previewBitmapのサイズとViewのサイズが異なる場合（通常同じだが、スケーリングされている場合に備えて）
-            val scaleX = previewBitmap.width.toFloat() / viewW.toFloat()
-            val scaleY = previewBitmap.height.toFloat() / viewH.toFloat()
+            // FILL_CENTER (CENTER_CROP) のスケールファクターとオフセットを計算
+            val scale = maxOf(viewW / imgW, viewH / imgH)
+            val scaledW = imgW * scale
+            val scaledH = imgH * scale
+            val offsetX = (viewW - scaledW) / 2f
+            val offsetY = (viewH - scaledH) / 2f
 
-            val cropL = (guideL * scaleX).roundToInt().coerceIn(0, previewBitmap.width)
-            val cropT = (guideT * scaleY).roundToInt().coerceIn(0, previewBitmap.height)
-            val cropW = (guideW * scaleX).roundToInt().coerceAtMost(previewBitmap.width - cropL)
-            val cropH = (guideH * scaleY).roundToInt().coerceAtMost(previewBitmap.height - cropT)
+            // 画面上のガイド枠の座標を、Bitmap上の座標に変換
+            val cropL = ((guideL - offsetX) / scale).roundToInt().coerceIn(0, previewBitmap.width)
+            val cropT = ((guideT - offsetY) / scale).roundToInt().coerceIn(0, previewBitmap.height)
+            val cropW = (guideW / scale).roundToInt().coerceAtMost(previewBitmap.width - cropL)
+            val cropH = (guideH / scale).roundToInt().coerceAtMost(previewBitmap.height - cropT)
 
             if (cropW <= 0 || cropH <= 0) {
                 previewBitmap.recycle()
