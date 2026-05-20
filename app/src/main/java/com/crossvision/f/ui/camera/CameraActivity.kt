@@ -440,18 +440,9 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
             return
         }
 
-        // シャッター音を鳴らす（オプション）
-        try {
-            android.media.MediaActionSound().apply {
-                load(android.media.MediaActionSound.SHUTTER_CLICK)
-                play(android.media.MediaActionSound.SHUTTER_CLICK)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "シャッター音再生エラー", e)
-        }
-
+        // シャッター音を鳴らさずに無音で保存処理を実行
         analysisScope.launch(Dispatchers.IO) {
-            val success = cropPreviewBitmapToGuideFrame(previewBitmap, photoFile)
+            val success = savePreviewBitmap(previewBitmap, photoFile)
             
             withContext(Dispatchers.Main) {
                 binding.btnCapture.isEnabled = true
@@ -464,7 +455,7 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
                 } else {
                     Toast.makeText(
                         this@CameraActivity,
-                        "画像の保存・処理に失敗しました",
+                        "画像の保存に失敗しました",
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -472,63 +463,17 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
         }
     }
 
-    private fun cropPreviewBitmapToGuideFrame(previewBitmap: Bitmap, photoFile: File): Boolean {
-        try {
-            // previewBitmap は PreviewView と同じサイズとは限らない（元の解像度を保持するため）
-            val viewW = binding.previewView.width.toFloat()
-            val viewH = binding.previewView.height.toFloat()
-            val imgW = previewBitmap.width.toFloat()
-            val imgH = previewBitmap.height.toFloat()
-
-            if (viewW <= 0f || viewH <= 0f || imgW <= 0f || imgH <= 0f) {
-                previewBitmap.recycle()
-                return false
-            }
-
-            // ガイド枠の画面上での左上座標を取得
-            val previewLoc = IntArray(2)
-            binding.previewView.getLocationOnScreen(previewLoc)
-            
-            val guideLoc = IntArray(2)
-            binding.guideFrame.getLocationOnScreen(guideLoc)
-            
-            // PreviewView内での相対座標
-            val guideL = (guideLoc[0] - previewLoc[0]).toFloat()
-            val guideT = (guideLoc[1] - previewLoc[1]).toFloat()
-            val guideW = binding.guideFrame.width.toFloat()
-            val guideH = binding.guideFrame.height.toFloat()
-
-            // FILL_CENTER (CENTER_CROP) のスケールファクターとオフセットを計算
-            val scale = maxOf(viewW / imgW, viewH / imgH)
-            val scaledW = imgW * scale
-            val scaledH = imgH * scale
-            val offsetX = (viewW - scaledW) / 2f
-            val offsetY = (viewH - scaledH) / 2f
-
-            // 画面上のガイド枠の座標を、Bitmap上の座標に変換
-            val cropL = ((guideL - offsetX) / scale).roundToInt().coerceIn(0, previewBitmap.width)
-            val cropT = ((guideT - offsetY) / scale).roundToInt().coerceIn(0, previewBitmap.height)
-            val cropW = (guideW / scale).roundToInt().coerceAtMost(previewBitmap.width - cropL)
-            val cropH = (guideH / scale).roundToInt().coerceAtMost(previewBitmap.height - cropT)
-
-            if (cropW <= 0 || cropH <= 0) {
-                previewBitmap.recycle()
-                return false
-            }
-
-            // クロップを実行
-            val croppedBitmap = Bitmap.createBitmap(previewBitmap, cropL, cropT, cropW, cropH)
-            previewBitmap.recycle()
-
-            // 保存
+    private fun savePreviewBitmap(previewBitmap: Bitmap, photoFile: File): Boolean {
+        return try {
             photoFile.outputStream().use { fos ->
-                croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 95, fos)
+                previewBitmap.compress(Bitmap.CompressFormat.JPEG, 95, fos)
             }
-
-            return true
+            previewBitmap.recycle()
+            true
         } catch (e: Exception) {
-            Log.e(TAG, "画像のクロップ処理中にエラーが発生しました", e)
-            return false
+            Log.e(TAG, "画像の保存中にエラーが発生しました", e)
+            previewBitmap.recycle()
+            false
         }
     }
 
