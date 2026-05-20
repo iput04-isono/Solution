@@ -187,6 +187,7 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
 
             // プレビュー
             val previewBuilder = Preview.Builder()
+                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
             
             // 手振れ補正を有効化 (Camera2Interopを使用)
             Camera2Interop.Extender(previewBuilder).apply {
@@ -202,6 +203,7 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
             val imageCaptureBuilder = ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                 .setTargetRotation(binding.previewView.display.rotation)
+                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
                 .setFlashMode(flashMode)
             
             Camera2Interop.Extender(imageCaptureBuilder).apply {
@@ -213,8 +215,8 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
             val imageAnalysisBuilder = ImageAnalysis.Builder()
                 // 解析が追いつかない場合は最新フレームだけを保持（キュー溢れ防止）
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                // 解析解像度を上げることで検出精度（枠の安定性）を向上
-                .setTargetResolution(Size(1280, 720))
+                // アスペクト比を他と揃える
+                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
             
             Camera2Interop.Extender(imageAnalysisBuilder).apply {
                 setCaptureRequestOption(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)
@@ -482,7 +484,7 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
             val originalBitmap = BitmapFactory.decodeFile(filePath, options) ?: return false
 
             // 2. EXIFの回転情報を考慮して正しい向きにする
-            val correctedBitmap = correctExifRotation(originalBitmap, filePath)
+            var correctedBitmap = correctExifRotation(originalBitmap, filePath)
 
             // 3. プレビューのサイズとガイド枠のサイズを取得
             val viewW = binding.previewView.width.toFloat()
@@ -491,6 +493,31 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
                 if (correctedBitmap != originalBitmap) correctedBitmap.recycle()
                 originalBitmap.recycle()
                 return false
+            }
+
+            // プレビューと画像の縦横の向き（ポートレート/ランドスケープ）を一致させる
+            val isViewPortrait = viewH > viewW
+            val isImagePortrait = correctedBitmap.height > correctedBitmap.width
+
+            if (isViewPortrait != isImagePortrait) {
+                // 向きが一致しない場合、カメラの物理的な配置特性（通常90度回転）に合わせて回転させる
+                val matrix = Matrix()
+                if (isViewPortrait) {
+                    // プレビューが縦長で画像が横長の場合、時計回りに90度回転
+                    matrix.postRotate(90f)
+                } else {
+                    // プレビューが横長で画像が縦長の場合、反時計回りに90度回転（270度）
+                    matrix.postRotate(-90f)
+                }
+                val rotated = Bitmap.createBitmap(
+                    correctedBitmap, 0, 0,
+                    correctedBitmap.width, correctedBitmap.height,
+                    matrix, true
+                )
+                if (correctedBitmap != originalBitmap) {
+                    correctedBitmap.recycle()
+                }
+                correctedBitmap = rotated
             }
 
             val guideW = binding.guideFrame.width.toFloat()
