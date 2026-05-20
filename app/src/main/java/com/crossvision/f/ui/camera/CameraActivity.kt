@@ -25,6 +25,8 @@ import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
+import android.graphics.BitmapFactory
+import android.media.ExifInterface
 import com.crossvision.f.R
 import com.crossvision.f.databinding.ActivityCameraBinding
 import com.crossvision.f.ocr.ImagePreprocessor
@@ -425,20 +427,40 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
 
         val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
 
+        // 撮影処理中の二重タップ防止
+        binding.btnCapture.isEnabled = false
+
         imageCapture.takePicture(
             outputOptions,
             ContextCompat.getMainExecutor(this),
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    val resultIntent = Intent().apply {
-                        putExtra("IMAGE_PATH", photoFile.absolutePath)
+                    // コルーチンを使用してバックグラウンドで画像切り抜き処理を実行
+                    analysisScope.launch(Dispatchers.IO) {
+                        val success = cropImageToGuideFrame(photoFile)
+                        
+                        withContext(Dispatchers.Main) {
+                            binding.btnCapture.isEnabled = true
+                            if (success) {
+                                val resultIntent = Intent().apply {
+                                    putExtra("IMAGE_PATH", photoFile.absolutePath)
+                                }
+                                setResult(RESULT_OK, resultIntent)
+                                finish()
+                            } else {
+                                Toast.makeText(
+                                    this@CameraActivity,
+                                    "画像の保存・処理に失敗しました",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
                     }
-                    setResult(RESULT_OK, resultIntent)
-                    finish()
                 }
 
                 override fun onError(exception: ImageCaptureException) {
                     Log.e(TAG, "撮影エラー: ${exception.message}", exception)
+                    binding.btnCapture.isEnabled = true
                     Toast.makeText(
                         this@CameraActivity,
                         "撮影に失敗しました",
@@ -448,6 +470,95 @@ class CameraActivity : AppCompatActivity(), SensorEventListener {
             }
         )
     }
+
+    /**
+     * 保存された画像を読み込み、プレビューの guideFrame に合わせてクロップして上書き保存する。
+     */
+    private fun cropImageToGuideFrame(photoFile: File): Boolean {
+        try {
+            val filePath = photoFile.absolutePath
+            // 1. 元の画像をロードする
+            val options = BitmapFactory.Options()
+            val originalBitmap = BitmapFactory.decodeFile(filePath, options) ?: return false
+
+            // 2. EXIFの回転情報を考慮して正しい向きにする
+            val correctedBitmap = correctExifRotation(originalBitmap, filePath)
+
+            // 3. プレビューのサイズとガイド枠のサイズを取得
+            val viewW = binding.previewView.width.toFloat()
+            val viewH = binding.previewView.height.toFloat()
+            if (viewW <= 0f || viewH <= 0f) {
+                if (correctedBitmap != originalBitmap) correctedBitmap.recycle()
+                originalBitmap.recycle()
+                return false
+            }
+
+            val guideW = binding.guideFrame.width.toFloat()
+            val guideH = binding.guideFrame.height.toFloat()
+            val guideL = (viewW - guideW) / 2f
+            val guideT = (viewH - guideH) / 2f
+
+            // 4. 画像のサイズを取得
+            val imgW = correctedBitmap.width.toFloat()
+            val imgH = correctedBitmap.height.toFloat()
+
+            // 5. FILL_CENTER（CENTER_CROP）のスケールファクターを計算
+            val scale = maxOf(viewW / imgW, viewH / imgH)
+
+            val scaledW = imgW * scale
+            val scaledH = imgH * scale
+            val offsetX = (viewW - scaledW) / 2f
+            val offsetY = (viewH - scaledH) / 2f
+
+            // 6. 画像上の切り抜き範囲を計算
+            val cropL = ((guideL - offsetX) / scale).roundToInt().coerceIn(0, correctedBitmap.width)
+            val cropT = ((guideT - offsetY) / scale).roundToInt().coerceIn(0, correctedBitmap.height)
+            val cropW = (guideW / scale).roundToInt().coerceAtMost(correctedBitmap.width - cropL)
+            val cropH = (guideH / scale).roundToInt().coerceAtMost(correctedBitmap.height - cropT)
+
+            if (cropW <= 0 || cropH <= 0) {
+                if (correctedBitmap != originalBitmap) correctedBitmap.recycle()
+                originalBitmap.recycle()
+                return false
+            }
+
+            // 7. クロップを実行
+            val croppedBitmap = Bitmap.createBitmap(correctedBitmap, cropL, cropT, cropW, cropH)
+
+            // 8. 上書き保存
+            photoFile.outputStream().use { fos ->
+                croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 95, fos)
+            }
+
+            // 9. メモリ解放
+            if (correctedBitmap != originalBitmap) correctedBitmap.recycle()
+            originalBitmap.recycle()
+            croppedBitmap.recycle()
+            return true
+        } catch (e: Exception) {
+            Log.e(TAG, "画像のクロップ処理中にエラーが発生しました", e)
+            return false
+        }
+    }
+
+    /**
+     * EXIFの向き情報に基づいてBitmapを正しい向きに回転する。
+     */
+    private fun correctExifRotation(bitmap: Bitmap, path: String): Bitmap {
+        val exif = try { ExifInterface(path) } catch (e: Exception) { return bitmap }
+        val orientation = exif.getAttributeInt(
+            ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL
+        )
+        val degrees = when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90  -> 90f
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+            else -> return bitmap
+        }
+        val matrix = Matrix().apply { postRotate(degrees) }
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
 
     private fun getOutputDirectory(): File {
         val mediaDir = filesDir.let {
