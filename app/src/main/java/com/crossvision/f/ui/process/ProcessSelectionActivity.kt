@@ -137,6 +137,8 @@ class ProcessSelectionActivity : AppCompatActivity() {
 
         // ログアウトボタン
         binding.btnLogout.setOnClickListener {
+            // 暗号化されたセッション情報をクリア
+            com.crossvision.f.data.local.SessionManager(applicationContext).clearSession()
             // ログイン画面へ戻る
             val intent = Intent(this, com.crossvision.f.ui.login.LoginActivity::class.java)
             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK

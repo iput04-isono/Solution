@@ -43,15 +43,15 @@ class OcrEngine(private val context: Context) {
 
         /**
          * 1 枚の画像から処理するポリゴン領域の最大数。
-         * ver1.2 で 24 → 12 に変更。処理時間の上限を絞り誤検出を抑制する。
+         * ver1.2 で 24 → 12 に変更。ver1.6 で 12 → 24 に戻す（斎藤案：BFS感度向上で誤検出が減るため上限を緩和）。
          */
-        private const val MAX_POLYGON_REGIONS = 12
+        private const val MAX_POLYGON_REGIONS = 24
 
         /**
          * SVTR 認識モデルへの入力幅の最大値。
-         * ver1.2 で 640 → 512 に変更。DET_SIZE の縮小に合わせてメモリ使用量を削減する。
+         * ver1.2 で 640 → 512 に変更。ver1.6 で 512 → 1920 に拡大（斎藤案：高解像度の長い製品コードを切り捨てない）。
          */
-        private const val MAX_REC_WIDTH = 512
+        private const val MAX_REC_WIDTH = 1920
 
         /** SVTR 認識モデルへの入力高さ（固定値）。モデルが 48px を前提に訓練されている */
         private const val REC_HEIGHT = 48
@@ -261,7 +261,7 @@ class OcrEngine(private val context: Context) {
                 polygon = polygon,
                 imageWidth = originalBitmap.width,
                 imageHeight = originalBitmap.height,
-                scale = 1.6f
+                scale = 1.20f  // ver1.6 で 1.6 → 1.20 に縮小（斎藤案：隣接文字の混入防止）
             )
 
             val boundingRect = polygonToBoundingRect(expandedPolygon)
@@ -480,8 +480,9 @@ class OcrEngine(private val context: Context) {
         val scaleX = outputWidth.toFloat() / DET_SIZE.toFloat()
         val scaleY = outputHeight.toFloat() / DET_SIZE.toFloat()
 
-        // 閾値を 0.26 -> 0.18 に下げて感度を向上（液晶画面や暗い環境への耐性アップ）
-        return bfsComponents(heatMap, threshold = 0.18f, minPx = 15)
+        // ver1.6.1: 0.18/15 (ver1.5) → 0.26/24 (ver1.4) に戻す
+        // ver1.5 の低閾値は暗い環境向けだが鉄骨刻印環境では誤検出が増えるため元に戻す
+        return bfsComponents(heatMap, threshold = 0.26f, minPx = 24)
             .mapNotNull { comp ->
                 val rr = pcaMinRect(comp) ?: return@mapNotNull null
                 val corners = unclipRect(rr, ratio = 1.5f)
