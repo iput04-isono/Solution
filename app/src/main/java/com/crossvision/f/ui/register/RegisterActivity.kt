@@ -6,6 +6,8 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.crossvision.f.R
+import com.crossvision.f.data.model.PendingRegistration
+import com.crossvision.f.data.model.PendingRegistrationItem
 import com.crossvision.f.data.model.Registration
 import com.crossvision.f.data.model.SyncStatus
 import com.crossvision.f.data.repository.AppRepository
@@ -112,21 +114,26 @@ class RegisterActivity : AppCompatActivity() {
                 val isOnline = syncManager.isNetworkAvailable()
                 val initialStatus = SyncStatus.PENDING
 
-                // 各製品コードを登録
-                val registrations = productCodes.map { code ->
-                    Registration(
+                // 親（セッション情報）と子（製品コードリスト）を親子構造で作成
+                val parentRegistration = PendingRegistration(
+                    constructionName = constructionName,
+                    processName = processName,
+                    warehouseNo = "",
+                    columnNo = "",
+                    tierNo = "",
+                    syncStatus = initialStatus,
+                    userId = userId
+                )
+
+                val items = productCodes.mapIndexed { index, code ->
+                    PendingRegistrationItem(
+                        registrationId = 0, // Dao側で親の自動採番IDが注入される
                         productCode = code,
-                        constructionName = constructionName,
-                        processName = processName,
-                        warehouseNo = "",
-                        columnNo = "",
-                        tierNo = "",
-                        syncStatus = initialStatus,
-                        userId = userId
+                        displayOrder = index
                     )
                 }
 
-                repository.insertRegistrations(registrations)
+                repository.insertRegistrationWithItems(parentRegistration, items)
                 
                 // オンラインなら即座に同期を試行
                 if (isOnline) {

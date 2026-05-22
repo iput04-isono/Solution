@@ -108,22 +108,25 @@ def normalize_product_code(code: str) -> str:
 @app.post("/api/registrations", response_model=RegistrationResponse)
 def post_registration(req: RegistrationRequest, api_key: str = Depends(get_api_key)):
     data = load_data()
-    entry = {
-        "id": len(data) + 1,
-        "process_id": req.process_id,
-        "division": req.division,
-        "worker_id": req.worker_id,
-        "device_id": req.device_id,
-        "registered_at": req.registered_at,
-        "product_numbers": req.product_numbers,
-        "construction_name": req.construction_name,
-        "process_name": req.process_name,
-        "received_at": datetime.now().isoformat(),
-    }
-    data.append(entry)
+    # 送信された製品番号ごとに別々のレコードとして個別に保存
+    for product_number in req.product_numbers:
+        entry = {
+            "id": len(data) + 1,
+            "process_id": req.process_id,
+            "division": req.division,
+            "worker_id": req.worker_id,
+            "device_id": req.device_id,
+            "registered_at": req.registered_at,
+            "product_numbers": [product_number],
+            "construction_name": req.construction_name,
+            "process_name": req.process_name,
+            "received_at": datetime.now().isoformat(),
+        }
+        data.append(entry)
+        print(f"[受信 {entry['received_at']}] 区分={entry['division']} 製品番号={entry['product_numbers']}")
+    
     save_data(data)
-    print(f"[受信 {entry['received_at']}] 区分={entry['division']} 製品番号={entry['product_numbers']}")
-    return RegistrationResponse(success=True, message=f"{len(req.product_numbers)}件を保存しました")
+    return RegistrationResponse(success=True, message=f"{len(req.product_numbers)}件を個別のレコードとして保存しました")
 
 @app.get("/api/registrations")
 def get_registrations():
