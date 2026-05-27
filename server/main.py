@@ -3,18 +3,25 @@
 起動方法: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 """
 
-from fastapi import FastAPI, Response, Security, HTTPException, Depends, UploadFile, File
+from fastapi import FastAPI, Response, Security, HTTPException, Depends, UploadFile, File, Request
 from fastapi.security.api_key import APIKeyHeader
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 import json, os, csv, io, socket, starlette.status, unicodedata
 from zeroconf import IPVersion, ServiceInfo, Zeroconf
+import qrcode
 
 app = FastAPI(title="鉄骨認識サーバー（開発用）")
 
 BASE_DIR = os.path.dirname(__file__)
+APK_DIR = os.path.join(BASE_DIR, "apk")
+APK_FILENAME = "CrossVisionF-debug.apk"
+
+def get_apk_path() -> str:
+    os.makedirs(APK_DIR, exist_ok=True)
+    return os.path.join(APK_DIR, APK_FILENAME)
 
 # ── モデル ──────────────────────────────────────────────
 
@@ -307,6 +314,82 @@ def bulk_delete_registrations(req: BulkDeleteRequest, api_key: str = Depends(get
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/apk", response_class=HTMLResponse)
+def apk_page(request: Request):
+    """
+    端末配布用のAPKダウンロードページ。
+    スマホでQRを読んでアクセスし、そのままAPKをダウンロードできる。
+    """
+    apk_path = get_apk_path()
+    base_url = str(request.base_url).rstrip("/")
+    download_url = f"{base_url}/apk/download"
+    qr_url = f"{base_url}/apk/qr"
+    exists = os.path.exists(apk_path)
+    size_mb = (os.path.getsize(apk_path) / (1024 * 1024)) if exists else 0.0
+
+    return f"""
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CrossVision F APK 配布</title>
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans JP", sans-serif; margin: 20px; }}
+    .card {{ max-width: 720px; margin: 0 auto; padding: 16px; border: 1px solid #ddd; border-radius: 12px; }}
+    .row {{ display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }}
+    .qr {{ width: 220px; height: 220px; border: 1px solid #eee; border-radius: 8px; }}
+    .muted {{ color: #666; font-size: 14px; }}
+    .btn {{ display: inline-block; padding: 12px 16px; background: #1a73e8; color: #fff; border-radius: 10px; text-decoration: none; }}
+    code {{ background: #f6f8fa; padding: 2px 6px; border-radius: 6px; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>CrossVision F APK 配布</h2>
+    <p class="muted">
+      スマホでこのページを開くか、下のQRコードを読み取ってアクセスしてください。
+    </p>
+    <div class="row">
+      <img class="qr" src="/apk/qr" alt="APK Download QR" />
+      <div>
+        <p><a class="btn" href="/apk/download">APK をダウンロード</a></p>
+        <p class="muted">ダウンロードURL: <code>{download_url}</code></p>
+        <p class="muted">
+          ステータス: {"✅ 配布ファイルあり" if exists else "⚠️ APK未配置"}{"（約 %.1fMB）" % size_mb if exists else ""}
+        </p>
+      </div>
+    </div>
+    <hr />
+    <p class="muted">
+      ※ Android の設定により「提供元不明のアプリ」の許可が必要な場合があります。<br/>
+      ※ 社内配布用途を想定しています。インターネットへ公開しないでください。
+    </p>
+  </div>
+</body>
+</html>
+"""
+
+@app.get("/apk/download")
+def download_apk():
+    apk_path = get_apk_path()
+    if not os.path.exists(apk_path):
+        raise HTTPException(status_code=404, detail=f"APKが見つかりません: {APK_FILENAME}")
+    return FileResponse(
+        apk_path,
+        media_type="application/vnd.android.package-archive",
+        filename=APK_FILENAME,
+    )
+
+@app.get("/apk/qr")
+def apk_qr(request: Request):
+    base_url = str(request.base_url).rstrip("/")
+    download_url = f"{base_url}/apk/download"
+    img = qrcode.make(download_url)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
 
 @app.get("/api/export/csv")
 def export_csv():
