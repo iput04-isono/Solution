@@ -39,7 +39,7 @@
     <!-- 画像認識画面 -->
     <string name="recognize_title">画像認識</string>
     <string name="btn_camera">カメラで撮影</string>
-    <string name="btn_gallery">ギャラリーから選択</string>
+    <string name="btn_gallery">ギャラリー選択</string>
     <string name="recognize_instruction">カメラで撮影するか、ギャラリーから画像を選択してください</string>
 
     <!-- カメラ画面 -->
@@ -55,7 +55,7 @@
     <string name="confirm_delete_dialog_title">削除確認</string>
     <string name="confirm_delete_dialog_message">この製品コードを削除しますか？</string>
     <string name="confirm_add_manual">手動で追加</string>
-    <string name="confirm_register_selected">選択した製品を登録</string>
+    <string name="confirm_register_selected">選択して登録</string>
 
     <!-- 登録画面 -->
     <string name="register_title">登録</string>

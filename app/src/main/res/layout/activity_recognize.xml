@@ -113,7 +113,6 @@
                 android:layout_weight="1"
                 android:text="@string/btn_camera"
                 android:minHeight="@dimen/button_height_large"
-                android:lines="2"
                 app:icon="@android:drawable/ic_menu_camera"
                 android:layout_marginEnd="@dimen/spacing_sm" />
 
@@ -125,7 +124,6 @@
                 android:layout_weight="1"
                 android:text="@string/btn_gallery"
                 android:minHeight="@dimen/button_height_large"
-                android:lines="2"
                 app:icon="@android:drawable/ic_menu_gallery" />
 
         </LinearLayout>
