@@ -110,32 +110,9 @@ class RegisterActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val duplicatedCodes = productCodes.filter { code ->
-                    repository.isProductRegisteredToday(code)
-                }
-
-                if (duplicatedCodes.isNotEmpty()) {
-                    binding.btnRegister.isEnabled = true
-                    binding.progressRegister.visibility = android.view.View.GONE
-                    
-                    val msg = "以下の製品番号は本日すでに登録されています。\n" + 
-                              duplicatedCodes.joinToString(", ") + "\n\n本当に登録を続行しますか？"
-                    
-                    com.google.android.material.dialog.MaterialAlertDialogBuilder(this@RegisterActivity)
-                        .setTitle("重複登録の警告")
-                        .setMessage(msg)
-                        .setPositiveButton("続行") { _, _ ->
-                            binding.btnRegister.isEnabled = false
-                            binding.progressRegister.visibility = android.view.View.VISIBLE
-                            lifecycleScope.launch { executeRegistration() }
-                        }
-                        .setNegativeButton("キャンセル", null)
-                        .show()
-                } else {
-                    executeRegistration()
-                }
+                executeRegistration()
             } catch (e: Exception) {
-                Log.e("RegisterActivity", "重複チェックエラー", e)
+                Log.e("RegisterActivity", "登録処理呼び出しエラー", e)
                 executeRegistration() // エラー時はとりあえず続行する
             }
         }

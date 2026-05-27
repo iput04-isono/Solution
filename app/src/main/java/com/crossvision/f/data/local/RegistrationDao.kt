@@ -161,11 +161,4 @@ interface RegistrationDao {
     @Query("DELETE FROM pending_registrations WHERE id = :id")
     suspend fun deleteById(id: Long)
 
-    @Query("""
-        SELECT COUNT(i.id) 
-        FROM pending_registration_items i
-        INNER JOIN pending_registrations r ON i.registrationId = r.id
-        WHERE i.productCode = :productCode AND r.registeredAt >= :todayStartMillis
-    """)
-    suspend fun countTodayRegistrationsForProduct(productCode: String, todayStartMillis: Long): Int
 }
