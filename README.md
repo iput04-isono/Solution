@@ -305,6 +305,8 @@ pip install zeroconf
 
 ## OCR エンジン詳細（斎藤案 ver1.8 / 旧バージョンからの変更点）
 
+📄 **[OCR チューニングパラメータ詳細（各数値の意味・調整方法）](docs/ocr_parameters.md)**
+
 ### ver1.7 → ver1.8 変更点
 
 READMEの冒頭セクション「🆕 prototype_saitoOCR_ver1.8」を参照してください。
