@@ -31,6 +31,10 @@ class LoginActivity : AppCompatActivity() {
 
         sessionManager = SessionManager(applicationContext)
 
+        if (intent.getBooleanExtra("SESSION_EXPIRED", false)) {
+            android.widget.Toast.makeText(this, "一定時間操作がなかったため、自動的にログアウトしました", android.widget.Toast.LENGTH_LONG).show()
+        }
+
         setupUI()
         observeViewModel()
 
