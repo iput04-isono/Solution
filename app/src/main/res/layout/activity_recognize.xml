@@ -109,9 +109,11 @@
                 android:id="@+id/btnCamera"
                 style="@style/PrimaryButton"
                 android:layout_width="0dp"
-                android:layout_height="@dimen/button_height_large"
+                android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/btn_camera"
+                android:minHeight="@dimen/button_height_large"
+                android:lines="2"
                 app:icon="@android:drawable/ic_menu_camera"
                 android:layout_marginEnd="@dimen/spacing_sm" />
 
@@ -119,9 +121,11 @@
                 android:id="@+id/btnGallery"
                 style="@style/SecondaryButton"
                 android:layout_width="0dp"
-                android:layout_height="@dimen/button_height_large"
+                android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/btn_gallery"
+                android:minHeight="@dimen/button_height_large"
+                android:lines="2"
                 app:icon="@android:drawable/ic_menu_gallery" />
 
         </LinearLayout>
