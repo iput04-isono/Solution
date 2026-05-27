@@ -87,11 +87,6 @@ dependencies {
     // PaddleOCR（ONNX Runtime）
     implementation(libs.onnxruntime.android)
 
-    // WorkManager (オフライン同期)
-    implementation(libs.androidx.work.runtime)
-
-    // Coroutines
-    implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)
 
     // EncryptedSharedPreferences
