@@ -24,4 +24,12 @@ interface ProcessDao {
 
     @Query("DELETE FROM processes")
     suspend fun deleteAll()
+
+    @Query("""
+        SELECT p.id FROM processes p
+        INNER JOIN constructions c ON p.constructionId = c.id
+        WHERE c.name = :constructionName AND p.name = :processName
+        LIMIT 1
+    """)
+    suspend fun getProcessIdByNameSync(constructionName: String, processName: String): Long?
 }

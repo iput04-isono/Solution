@@ -139,4 +139,9 @@ class AppRepository(context: Context) {
         productLabelDao.deleteAll()
         productLabelDao.insertAll(labels)
     }
+
+    suspend fun getProcessIdByNameSync(constructionName: String, processName: String): Long? {
+        return processDao.getProcessIdByNameSync(constructionName, processName)
+    }
+
 }

@@ -46,3 +46,11 @@ test_logcat.txt
 # Android Studio 自動生成のサンプルテスト（旧パッケージ残骸）
 app/src/androidTest/java/com/example/
 app/src/test/java/com/example/
+
+# Python キャッシュ
+__pycache__/
+*.pyc
+*.pyo
+
+# テスト結果レポート（Excel）
+*.xlsx

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- デバッグビルド専用: アプリ一覧で区別しやすくする -->
-    <string name="app_name">鉄骨認識(dev)</string>
+    <!-- saito ver1.8: アプリ一覧で区別しやすくする -->
+    <string name="app_name">鉄骨認識(saito v1.8)</string>
 </resources>

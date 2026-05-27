@@ -21,9 +21,9 @@ android {
     buildTypes {
         debug {
             // デバッグビルドは ID にサフィックスを付けて既存アプリと共存できるようにする
-            applicationIdSuffix = ".debug"
-            versionNameSuffix = "-debug"
-            resValue("string", "app_name_suffix", "鉄骨認識(dev)")
+            applicationIdSuffix = ".saito19"
+            versionNameSuffix = "-saito-ver1.9"
+            resValue("string", "app_name_suffix", "鉄骨認識(saito v1.9)")
         }
         release {
             isMinifyEnabled = false
@@ -46,6 +46,12 @@ android {
     buildFeatures {
         viewBinding = true
     }
+}
+
+tasks.withType<Test> {
+    useJUnit()
+    val kotlinClassesDir = layout.buildDirectory.dir("tmp/kotlin-classes/debugUnitTest")
+    classpath += files(kotlinClassesDir)
 }
 
 dependencies {
@@ -87,11 +93,6 @@ dependencies {
     // PaddleOCR（ONNX Runtime）
     implementation(libs.onnxruntime.android)
 
-    // WorkManager (オフライン同期)
-    implementation(libs.androidx.work.runtime)
-
-    // Coroutines
-    implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)
 
     // EncryptedSharedPreferences
@@ -99,6 +100,8 @@ dependencies {
 
     // Test
     testImplementation(libs.junit)
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
+    testImplementation("org.jetbrains.kotlin:kotlin-test")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

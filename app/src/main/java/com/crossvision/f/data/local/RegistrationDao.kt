@@ -160,4 +160,5 @@ interface RegistrationDao {
 
     @Query("DELETE FROM pending_registrations WHERE id = :id")
     suspend fun deleteById(id: Long)
+
 }
