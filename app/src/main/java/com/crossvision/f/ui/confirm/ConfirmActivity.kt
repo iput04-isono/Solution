@@ -103,6 +103,7 @@ class ConfirmActivity : AppCompatActivity() {
         setupUnmatchedSection()
         updateProcessInfoUI()
         setupUI()
+        showFirstLoginHint()
     }
 
     private fun loadMasterData(onComplete: () -> Unit) {
@@ -162,6 +163,8 @@ class ConfirmActivity : AppCompatActivity() {
         binding.ivOverlay.setImageBitmap(bitmap)
         binding.ivOverlay.visibility = View.VISIBLE
         binding.ivOverlay.scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
+        // 画像が表示されたらヒントも表示
+        binding.tvImageHint.visibility = View.VISIBLE
 
         // タップで全画面表示
         binding.ivOverlay.setOnClickListener {
@@ -584,5 +587,21 @@ class ConfirmActivity : AppCompatActivity() {
         super.onDestroy()
         overlayBitmap?.recycle()
         overlayBitmap = null
+    }
+
+    /**
+     * ユーザーIDごとに初回のみ画面操作ヒントをSnackbarで表示する
+     */
+    private fun showFirstLoginHint() {
+        val prefs = getSharedPreferences("hint_prefs", android.content.Context.MODE_PRIVATE)
+        val key = "hint_confirm_shown_${userId}"
+        if (!prefs.getBoolean(key, false)) {
+            com.google.android.material.snackbar.Snackbar.make(
+                binding.root,
+                "💡 画像はタップで拡大、参考情報はタップして修正・追加できます",
+                com.google.android.material.snackbar.Snackbar.LENGTH_LONG
+            ).show()
+            prefs.edit().putBoolean(key, true).apply()
+        }
     }
 }
