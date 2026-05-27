@@ -6,6 +6,7 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import com.crossvision.f.data.local.SessionManager
 import com.crossvision.f.data.repository.AppRepository
 import com.crossvision.f.databinding.ActivityLoginBinding
 import com.crossvision.f.sync.SyncWorker
@@ -18,6 +19,7 @@ import com.crossvision.f.ui.process.ProcessSelectionActivity
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLoginBinding
+    private lateinit var sessionManager: SessionManager
     private val viewModel: LoginViewModel by viewModels {
         LoginViewModelFactory(AppRepository(applicationContext))
     }
@@ -26,6 +28,8 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        sessionManager = SessionManager(applicationContext)
 
         setupUI()
         observeViewModel()
@@ -61,17 +65,26 @@ class LoginActivity : AppCompatActivity() {
             when (result) {
                 is LoginResult.Success -> {
                     binding.tvError.visibility = View.GONE
+                    // セッションを暗号化保存
+                    sessionManager.saveSession(
+                        result.user.userId,
+                        result.user.password,
+                        result.user.displayName
+                    )
                     // 工事・工程選択画面へ遷移
                     val intent = Intent(this, ProcessSelectionActivity::class.java).apply {
                         putExtra("USER_ID", result.user.userId)
                         putExtra("USER_NAME", result.user.displayName)
                     }
                     startActivity(intent)
+                    finish()
                 }
 
                 is LoginResult.Error -> {
                     binding.tvError.text = result.message
                     binding.tvError.visibility = View.VISIBLE
+                    // ログイン失敗時は念のためセッションをクリア
+                    sessionManager.clearSession()
                 }
             }
         }

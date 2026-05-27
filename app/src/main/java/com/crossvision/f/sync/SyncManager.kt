@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Log
+import com.crossvision.f.data.model.PendingRegistration
+import com.crossvision.f.data.model.PendingRegistrationItem
 import com.crossvision.f.data.model.SyncStatus
 import com.crossvision.f.data.repository.AppRepository
 
@@ -43,47 +45,56 @@ class SyncManager(private val context: Context) {
     suspend fun syncPendingRegistrations(): Int {
         if (!isNetworkAvailable()) return 0
 
-        val unsyncedItems = repository.getUnsyncedRegistrations()
-        var syncedCount = 0
+        val pendingRegistrations = repository.getPendingRegistrations()
+        var totalSyncedProductCount = 0
 
-        for (item in unsyncedItems) {
+        for (parent in pendingRegistrations) {
+            val items = repository.getItemsByRegistrationId(parent.id)
+            if (items.isEmpty()) {
+                // 子要素がない場合は同期完了として処理する
+                repository.updateSyncStatus(parent.id, SyncStatus.SYNCED, System.currentTimeMillis())
+                continue
+            }
+
             try {
-                repository.updateSyncStatus(item.id, SyncStatus.SYNCING)
+                repository.updateSyncStatus(parent.id, SyncStatus.SYNCING)
 
-                // エンティティの userId は String なので、サーバーに合わせて Int に変換する（エラー時は 1）
-                val workerId = item.userId.toIntOrNull() ?: 1
+                // 登録ユーザーIDの変換
+                val workerId = parent.userId.toIntOrNull() ?: 1
+                val productCodes = items.map { it.productCode }
 
-                // サーバーへ送信
+                // サーバーへ送信（1回のAPIリクエストで複数製品コードを一括バルク送信）
                 val request = com.crossvision.f.data.model.RegistrationRequest(
-                    processId = 1, // 工程IDの動的取得が複雑なため現状は1（サーバー側でprocess_nameを優先使用）
-                    division = item.processName, // "start"/"end" 固定ではなく、選択された工程名をそのまま送信
+                    processId = 1, // 工程ID（サーバー側でprocess_nameを優先するため固定値1）
+                    division = parent.processName,
                     workerId = workerId,
                     deviceId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID),
-                    registeredAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).format(java.util.Date(item.registeredAt)),
-                    productNumbers = listOf(item.productCode),
-                    constructionName = item.constructionName,
-                    processName = item.processName
+                    registeredAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).format(java.util.Date(parent.registeredAt)),
+                    productNumbers = productCodes,
+                    constructionName = parent.constructionName,
+                    processName = parent.processName
                 )
 
                 val response = com.crossvision.f.data.api.RetrofitClient.apiService.postRegistration(request)
 
                 if (response.isSuccessful && response.body()?.success == true) {
                     repository.updateSyncStatus(
-                        item.id,
+                        parent.id,
                         SyncStatus.SYNCED,
                         System.currentTimeMillis()
                     )
-                    syncedCount++
+                    totalSyncedProductCount += items.size
                 } else {
-                    repository.updateSyncStatus(item.id, SyncStatus.FAILED)
+                    val errorMessage = response.body()?.message ?: "HTTP ${response.code()}"
+                    repository.incrementRetryCount(parent.id, errorMessage)
                 }
             } catch (e: Exception) {
-                Log.e("SyncManager", "Sync failed for item ${item.id}", e)
-                repository.updateSyncStatus(item.id, SyncStatus.FAILED)
+                Log.e("SyncManager", "Sync failed for parent registration ${parent.id}", e)
+                repository.incrementRetryCount(parent.id, e.message ?: "Unknown Exception")
             }
         }
 
-        return syncedCount
+        return totalSyncedProductCount
     }
 
     /**

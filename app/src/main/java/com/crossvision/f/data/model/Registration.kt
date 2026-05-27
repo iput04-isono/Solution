@@ -1,16 +1,10 @@
 package com.crossvision.f.data.model
 
-import androidx.room.Entity
-import androidx.room.PrimaryKey
-
 /**
  * 登録情報データモデル
- * 製品コードと倉庫位置情報を紐づけて管理
- * オフライン時は未送信(PENDING)として保存し、オンライン復帰時に同期
+ * 製品コードと倉庫位置情報を紐づけて管理（UIおよびドメイン層での受け渡し用）
  */
-@Entity(tableName = "registrations")
 data class Registration(
-    @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val productCode: String,           // 製品コード
     val constructionName: String,      // 工事名

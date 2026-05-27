@@ -73,16 +73,11 @@ class AppRepository(context: Context) {
         return registrationDao.getAll()
     }
 
-    suspend fun insertRegistration(registration: Registration): Long {
-        return registrationDao.insert(registration)
-    }
-
-    suspend fun insertRegistrations(registrations: List<Registration>) {
-        registrationDao.insertAll(registrations)
-    }
-
-    suspend fun updateRegistration(registration: Registration) {
-        registrationDao.update(registration)
+    suspend fun insertRegistrationWithItems(
+        registration: PendingRegistration,
+        items: List<PendingRegistrationItem>
+    ): Long {
+        return registrationDao.insertRegistrationWithItems(registration, items)
     }
 
     suspend fun deleteRegistration(id: Long) {
@@ -97,8 +92,20 @@ class AppRepository(context: Context) {
         return registrationDao.getUnsyncedCount()
     }
 
+    suspend fun getPendingRegistrations(): List<PendingRegistration> {
+        return registrationDao.getPendingRegistrations()
+    }
+
+    suspend fun getItemsByRegistrationId(registrationId: Long): List<PendingRegistrationItem> {
+        return registrationDao.getItemsByRegistrationId(registrationId)
+    }
+
     suspend fun updateSyncStatus(id: Long, status: SyncStatus, syncedAt: Long? = null) {
         registrationDao.updateSyncStatus(id, status, syncedAt)
+    }
+
+    suspend fun incrementRetryCount(id: Long, error: String) {
+        registrationDao.incrementRetryCount(id, error)
     }
 
     fun searchRegistrations(query: String): LiveData<List<Registration>> {

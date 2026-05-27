@@ -8,6 +8,8 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.EditText
+import android.widget.AutoCompleteTextView
+import android.widget.ArrayAdapter
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -40,6 +42,7 @@ class ConfirmActivity : AppCompatActivity() {
     
     private lateinit var repository: AppRepository
     private var masterProductCodes = setOf<String>()
+    private var unmatchedItems = mutableListOf<String>()
 
     // ズーム・パン用
     private var imageMatrix = Matrix()
@@ -86,6 +89,9 @@ class ConfirmActivity : AppCompatActivity() {
         val cropPaths       = intent.getStringArrayListExtra("CROP_PATHS") ?: arrayListOf()
         val overlayPath     = intent.getStringExtra("OVERLAY_IMAGE_PATH")
 
+        unmatchedItems.clear()
+        unmatchedItems.addAll(unmatchedTexts)
+
         setupToolbar()
         setupOverlayImage(overlayPath)
         
@@ -94,7 +100,7 @@ class ConfirmActivity : AppCompatActivity() {
             setupRecyclerView(productCodes, rawTexts, debugInfo, cropPaths)
         }
         
-        setupUnmatchedSection(unmatchedTexts)
+        setupUnmatchedSection()
         updateProcessInfoUI()
         setupUI()
     }
@@ -277,16 +283,19 @@ class ConfirmActivity : AppCompatActivity() {
         point.set(x / 2, y / 2)
     }
 
-    private fun setupUnmatchedSection(unmatchedTexts: List<String>) {
-        if (unmatchedTexts.isEmpty()) return
-        binding.unmatchedSection.visibility = View.VISIBLE
+    private fun setupUnmatchedSection() {
         val container = binding.unmatchedList
         container.removeAllViews()
+        if (unmatchedItems.isEmpty()) {
+            binding.unmatchedSection.visibility = View.GONE
+            return
+        }
+        binding.unmatchedSection.visibility = View.VISIBLE
         val dp8 = (8 * resources.displayMetrics.density).toInt()
         val dp4 = (4 * resources.displayMetrics.density).toInt()
-        unmatchedTexts.forEach { text ->
+        unmatchedItems.forEach { fullText ->
             val tv = TextView(this).apply {
-                this.text = "・$text"
+                this.text = "・$fullText"
                 textSize = 13f
                 setTextColor(0xFF495057.toInt())
                 setPadding(0, dp4, 0, dp4)
@@ -302,6 +311,9 @@ class ConfirmActivity : AppCompatActivity() {
                 ).apply { setMargins(0, dp4, 0, 0) }
                 layoutParams = lp
                 setPadding(dp8, dp8, dp8, dp8)
+                setOnClickListener {
+                    showUnmatchedEditDialog(fullText)
+                }
             }
             container.addView(tv)
         }
@@ -373,16 +385,19 @@ class ConfirmActivity : AppCompatActivity() {
 
     private fun showEditDialog(position: Int) {
         val currentItem = adapter.getItems()[position]
-        val editText = EditText(this).apply {
+        val autoCompleteTextView = AutoCompleteTextView(this).apply {
             setText(currentItem.productCode)
             setPadding(48, 32, 48, 32)
+            val adapter = ArrayAdapter(this@ConfirmActivity, android.R.layout.simple_dropdown_item_1line, masterProductCodes.toList())
+            setAdapter(adapter)
+            threshold = 1
         }
 
         AlertDialog.Builder(this)
             .setTitle("製品コードを編集")
-            .setView(editText)
+            .setView(autoCompleteTextView)
             .setPositiveButton("保存") { _, _ ->
-                val newCode = editText.text.toString().trim()
+                val newCode = autoCompleteTextView.text.toString().trim()
                 val validation = ProductCodeValidator.validate(newCode)
                 if (validation.isValid) {
                     val isInMaster = masterProductCodes.contains(newCode)
@@ -425,16 +440,19 @@ class ConfirmActivity : AppCompatActivity() {
     }
 
     private fun showAddDialog() {
-        val editText = EditText(this).apply {
+        val autoCompleteTextView = AutoCompleteTextView(this).apply {
             hint = "製品コードを入力"
             setPadding(48, 32, 48, 32)
+            val adapter = ArrayAdapter(this@ConfirmActivity, android.R.layout.simple_dropdown_item_1line, masterProductCodes.toList())
+            setAdapter(adapter)
+            threshold = 1
         }
 
         AlertDialog.Builder(this)
             .setTitle("製品コードを手動追加")
-            .setView(editText)
+            .setView(autoCompleteTextView)
             .setPositiveButton("追加") { _, _ ->
-                val code = editText.text.toString().trim()
+                val code = autoCompleteTextView.text.toString().trim()
                 val cleaned = ProductCodeValidator.cleanProductCode(code)
                 val validation = ProductCodeValidator.validate(cleaned)
 
@@ -451,6 +469,63 @@ class ConfirmActivity : AppCompatActivity() {
                         )
                         updateResultCount()
                         updateEmptyState()
+                    }
+
+                    if (!isInMaster) {
+                        AlertDialog.Builder(this)
+                            .setTitle("マスター未登録の警告")
+                            .setMessage("入力された製品コード「$cleaned」はマスターに登録されていません。\nこのまま追加しますか？")
+                            .setPositiveButton("はい") { _, _ -> action() }
+                            .setNegativeButton("いいえ", null)
+                            .show()
+                    } else {
+                        action()
+                    }
+                } else {
+                    AlertDialog.Builder(this)
+                        .setTitle("入力エラー")
+                        .setMessage(validation.message)
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+            .setNegativeButton("キャンセル", null)
+            .show()
+    }
+
+    private fun showUnmatchedEditDialog(fullText: String) {
+        val cleanCode = fullText.substringBefore("  (信頼度:").trim()
+        val autoCompleteTextView = AutoCompleteTextView(this).apply {
+            setText(cleanCode)
+            setPadding(48, 32, 48, 32)
+            val adapter = ArrayAdapter(this@ConfirmActivity, android.R.layout.simple_dropdown_item_1line, masterProductCodes.toList())
+            setAdapter(adapter)
+            threshold = 1
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("参考情報を修正して追加")
+            .setView(autoCompleteTextView)
+            .setPositiveButton("追加") { _, _ ->
+                val code = autoCompleteTextView.text.toString().trim()
+                val cleaned = ProductCodeValidator.cleanProductCode(code)
+                val validation = ProductCodeValidator.validate(cleaned)
+
+                if (validation.isValid) {
+                    val isInMaster = masterProductCodes.contains(cleaned)
+                    val action = {
+                        adapter.addItem(
+                            RecognizedItem(
+                                productCode = cleaned,
+                                rawText = code,
+                                isEdited = true,
+                                isInMaster = isInMaster
+                            )
+                        )
+                        updateResultCount()
+                        updateEmptyState()
+                        unmatchedItems.remove(fullText)
+                        setupUnmatchedSection()
                     }
 
                     if (!isInMaster) {
