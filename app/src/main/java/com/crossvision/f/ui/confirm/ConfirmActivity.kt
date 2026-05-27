@@ -469,6 +469,7 @@ class ConfirmActivity : AppCompatActivity() {
                         )
                         updateResultCount()
                         updateEmptyState()
+                        updateRegisterButton()
                     }
 
                     if (!isInMaster) {
@@ -524,6 +525,7 @@ class ConfirmActivity : AppCompatActivity() {
                         )
                         updateResultCount()
                         updateEmptyState()
+                        updateRegisterButton()
                         unmatchedItems.remove(fullText)
                         setupUnmatchedSection()
                     }
