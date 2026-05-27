@@ -17,6 +17,7 @@ class SessionManager(private val context: Context) {
         private const val KEY_PASSWORD = "password"
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_IS_LOGGED_IN = "is_logged_in"
+        private const val KEY_LAST_ACTIVITY_TIME = "last_activity_time"
     }
 
     private val sharedPreferences: SharedPreferences by lazy {
@@ -42,6 +43,7 @@ class SessionManager(private val context: Context) {
             putString(KEY_PASSWORD, password)
             putString(KEY_USER_NAME, userName)
             putBoolean(KEY_IS_LOGGED_IN, true)
+            putLong(KEY_LAST_ACTIVITY_TIME, System.currentTimeMillis())
             apply()
         }
     }
@@ -83,7 +85,27 @@ class SessionManager(private val context: Context) {
             remove(KEY_PASSWORD)
             remove(KEY_USER_NAME)
             putBoolean(KEY_IS_LOGGED_IN, false)
+            remove(KEY_LAST_ACTIVITY_TIME)
             apply()
         }
+    }
+
+    /**
+     * 最終操作時刻を現在時刻に更新する
+     */
+    fun updateLastActivityTime() {
+        if (isLoggedIn()) {
+            sharedPreferences.edit().putLong(KEY_LAST_ACTIVITY_TIME, System.currentTimeMillis()).apply()
+        }
+    }
+
+    /**
+     * 指定されたタイムアウト時間（ミリ秒）を経過しているか判定する
+     */
+    fun isSessionExpired(timeoutMs: Long): Boolean {
+        if (!isLoggedIn()) return false
+        val lastTime = sharedPreferences.getLong(KEY_LAST_ACTIVITY_TIME, 0L)
+        if (lastTime == 0L) return false // 未保存の場合は無効にしない
+        return (System.currentTimeMillis() - lastTime) > timeoutMs
     }
 }

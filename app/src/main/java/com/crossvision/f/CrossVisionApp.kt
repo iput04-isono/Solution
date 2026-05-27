@@ -24,6 +24,44 @@ class CrossVisionApp : Application() {
             com.crossvision.f.data.api.RetrofitClient.serverBaseUrl = url
         }
         nsdHelper.startDiscovery()
+
+        registerSessionTimeoutObserver()
+    }
+
+    private fun registerSessionTimeoutObserver() {
+        registerActivityLifecycleCallbacks(object : android.app.Application.ActivityLifecycleCallbacks {
+            override fun onActivityResumed(activity: android.app.Activity) {
+                if (activity !is com.crossvision.f.ui.login.LoginActivity) {
+                    val sessionManager = com.crossvision.f.data.local.SessionManager(this@CrossVisionApp)
+                    // 本番用: 3時間 (3 * 60 * 60 * 1000)
+                    val timeoutMs = 3L * 60L * 60L * 1000L 
+                    
+                    if (sessionManager.isSessionExpired(timeoutMs)) {
+                        Log.i("CrossVisionApp", "セッションタイムアウトのためログアウトします")
+                        sessionManager.clearSession()
+                        val intent = android.content.Intent(activity, com.crossvision.f.ui.login.LoginActivity::class.java).apply {
+                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            putExtra("SESSION_EXPIRED", true)
+                        }
+                        activity.startActivity(intent)
+                    } else {
+                        sessionManager.updateLastActivityTime()
+                    }
+                }
+            }
+
+            override fun onActivityPaused(activity: android.app.Activity) {
+                if (activity !is com.crossvision.f.ui.login.LoginActivity) {
+                    com.crossvision.f.data.local.SessionManager(this@CrossVisionApp).updateLastActivityTime()
+                }
+            }
+
+            override fun onActivityCreated(activity: android.app.Activity, savedInstanceState: android.os.Bundle?) {}
+            override fun onActivityStarted(activity: android.app.Activity) {}
+            override fun onActivityStopped(activity: android.app.Activity) {}
+            override fun onActivitySaveInstanceState(activity: android.app.Activity, outState: android.os.Bundle) {}
+            override fun onActivityDestroyed(activity: android.app.Activity) {}
+        })
     }
 
     override fun onTerminate() {
