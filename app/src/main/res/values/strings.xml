@@ -39,7 +39,7 @@
     <!-- 画像認識画面 -->
     <string name="recognize_title">画像認識</string>
     <string name="btn_camera">カメラで撮影</string>
-    <string name="btn_gallery">ギャラリー選択</string>
+    <string name="btn_gallery">ギャラリー</string>
     <string name="recognize_instruction">カメラで撮影するか、ギャラリーから画像を選択してください</string>
 
     <!-- カメラ画面 -->
