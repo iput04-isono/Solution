@@ -105,58 +105,88 @@ class RegisterActivity : AppCompatActivity() {
     }
 
     private fun performRegistration() {
-
         binding.btnRegister.isEnabled = false
         binding.progressRegister.visibility = android.view.View.VISIBLE
 
         lifecycleScope.launch {
             try {
-                val isOnline = syncManager.isNetworkAvailable()
-                val initialStatus = SyncStatus.PENDING
-
-                // 親（セッション情報）と子（製品コードリスト）を親子構造で作成
-                val parentRegistration = PendingRegistration(
-                    constructionName = constructionName,
-                    processName = processName,
-                    warehouseNo = "",
-                    columnNo = "",
-                    tierNo = "",
-                    syncStatus = initialStatus,
-                    userId = userId
-                )
-
-                val items = productCodes.mapIndexed { index, code ->
-                    PendingRegistrationItem(
-                        registrationId = 0, // Dao側で親の自動採番IDが注入される
-                        productCode = code,
-                        displayOrder = index
-                    )
+                val duplicatedCodes = productCodes.filter { code ->
+                    repository.isProductRegisteredToday(code)
                 }
 
-                repository.insertRegistrationWithItems(parentRegistration, items)
-                
-                // オンラインなら即座に同期を試行
-                if (isOnline) {
-                    val syncedCount = syncManager.syncPendingRegistrations()
-                    if (syncedCount == productCodes.size) {
-                        showSuccessMessage("登録完了：${productCodes.size}件\nサーバーへの送信も正常に完了しました。")
-                    } else if (syncedCount > 0) {
-                        showSuccessMessage("一部送信完了：${syncedCount}/${productCodes.size}件\n残りのデータは通信環境が改善し次第、自動的に再送されます。")
-                    } else {
-                        showSuccessMessage("ローカル保存完了：${productCodes.size}件\nサーバーへの送信に失敗しました。データは安全に保存されており、後で自動的に再送されます。")
-                    }
+                if (duplicatedCodes.isNotEmpty()) {
+                    binding.btnRegister.isEnabled = true
+                    binding.progressRegister.visibility = android.view.View.GONE
+                    
+                    val msg = "以下の製品番号は本日すでに登録されています。\n" + 
+                              duplicatedCodes.joinToString(", ") + "\n\n本当に登録を続行しますか？"
+                    
+                    com.google.android.material.dialog.MaterialAlertDialogBuilder(this@RegisterActivity)
+                        .setTitle("重複登録の警告")
+                        .setMessage(msg)
+                        .setPositiveButton("続行") { _, _ ->
+                            binding.btnRegister.isEnabled = false
+                            binding.progressRegister.visibility = android.view.View.VISIBLE
+                            lifecycleScope.launch { executeRegistration() }
+                        }
+                        .setNegativeButton("キャンセル", null)
+                        .show()
                 } else {
-                    showSuccessMessage("オフライン保存：${productCodes.size}件\n現在は通信できないため、端末内に保存しました。ネットワーク復帰時に自動で送信されます。")
+                    executeRegistration()
                 }
-
             } catch (e: Exception) {
-                Log.e("RegisterActivity", "登録処理エラー", e)
-                Snackbar.make(binding.root, "登録に失敗しました: ${e.message}", Snackbar.LENGTH_LONG)
-                    .show()
-            } finally {
-                binding.btnRegister.isEnabled = true
-                binding.progressRegister.visibility = android.view.View.GONE
+                Log.e("RegisterActivity", "重複チェックエラー", e)
+                executeRegistration() // エラー時はとりあえず続行する
             }
+        }
+    }
+
+    private suspend fun executeRegistration() {
+        try {
+            val isOnline = syncManager.isNetworkAvailable()
+            val initialStatus = SyncStatus.PENDING
+
+            // 親（セッション情報）と子（製品コードリスト）を親子構造で作成
+            val parentRegistration = PendingRegistration(
+                constructionName = constructionName,
+                processName = processName,
+                warehouseNo = "",
+                columnNo = "",
+                tierNo = "",
+                syncStatus = initialStatus,
+                userId = userId
+            )
+
+            val items = productCodes.mapIndexed { index, code ->
+                PendingRegistrationItem(
+                    registrationId = 0, // Dao側で親の自動採番IDが注入される
+                    productCode = code,
+                    displayOrder = index
+                )
+            }
+
+            repository.insertRegistrationWithItems(parentRegistration, items)
+            
+            // オンラインなら即座に同期を試行
+            if (isOnline) {
+                val syncedCount = syncManager.syncPendingRegistrations()
+                if (syncedCount == productCodes.size) {
+                    showSuccessMessage("登録完了：${productCodes.size}件\nサーバーへの送信も正常に完了しました。")
+                } else if (syncedCount > 0) {
+                    showSuccessMessage("一部送信完了：${syncedCount}/${productCodes.size}件\n残りのデータは通信環境が改善し次第、自動的に再送されます。")
+                } else {
+                    showSuccessMessage("ローカル保存完了：${productCodes.size}件\nサーバーへの送信に失敗しました。データは安全に保存されており、後で自動的に再送されます。")
+                }
+            } else {
+                showSuccessMessage("オフライン保存：${productCodes.size}件\n現在は通信できないため、端末内に保存しました。ネットワーク復帰時に自動で送信されます。")
+            }
+
+        } catch (e: Exception) {
+            Log.e("RegisterActivity", "登録処理エラー", e)
+            Snackbar.make(binding.root, "登録に失敗しました: ${e.message}", Snackbar.LENGTH_LONG).show()
+        } finally {
+            binding.btnRegister.isEnabled = true
+            binding.progressRegister.visibility = android.view.View.GONE
         }
     }
 

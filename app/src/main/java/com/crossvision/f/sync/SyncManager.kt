@@ -63,9 +63,13 @@ class SyncManager(private val context: Context) {
                 val workerId = parent.userId.toIntOrNull() ?: 1
                 val productCodes = items.map { it.productCode }
 
+                // DBから正確な工程IDを取得（見つからなければフォールバックで1）
+                val fetchedProcessId = repository.getProcessIdByNameSync(parent.constructionName, parent.processName)
+                val actualProcessId = fetchedProcessId ?: 1L
+
                 // サーバーへ送信（1回のAPIリクエストで複数製品コードを一括バルク送信）
                 val request = com.crossvision.f.data.model.RegistrationRequest(
-                    processId = 1, // 工程ID（サーバー側でprocess_nameを優先するため固定値1）
+                    processId = actualProcessId.toInt(),
                     division = parent.processName,
                     workerId = workerId,
                     deviceId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID),
@@ -108,15 +112,15 @@ class SyncManager(private val context: Context) {
      *
      * @return 同期した件数（スキップ時は -1、失敗時は 0）
      */
-    suspend fun syncProductLabels(): Int {
+    suspend fun syncProductLabels(force: Boolean = false): Int {
         if (!isNetworkAvailable()) {
             Log.d(TAG, "製品コード同期スキップ: ネットワーク未接続")
             return -1
         }
 
-        // 24時間以内に同期済みであればスキップ
+        // 24時間以内に同期済みであればスキップ（forceがtrueの場合は無視）
         val lastSynced = repository.getProductLabelLastSyncedAt()
-        if (lastSynced != null && System.currentTimeMillis() - lastSynced < SYNC_INTERVAL_MS) {
+        if (!force && lastSynced != null && System.currentTimeMillis() - lastSynced < SYNC_INTERVAL_MS) {
             Log.d(TAG, "製品コード同期スキップ: 前回同期から24時間以内")
             return -1
         }

@@ -139,4 +139,18 @@ class AppRepository(context: Context) {
         productLabelDao.deleteAll()
         productLabelDao.insertAll(labels)
     }
+
+    suspend fun getProcessIdByNameSync(constructionName: String, processName: String): Long? {
+        return processDao.getProcessIdByNameSync(constructionName, processName)
+    }
+
+    suspend fun isProductRegisteredToday(productCode: String): Boolean {
+        val calendar = java.util.Calendar.getInstance()
+        calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        calendar.set(java.util.Calendar.MINUTE, 0)
+        calendar.set(java.util.Calendar.SECOND, 0)
+        calendar.set(java.util.Calendar.MILLISECOND, 0)
+        val count = registrationDao.countTodayRegistrationsForProduct(productCode, calendar.timeInMillis)
+        return count > 0
+    }
 }

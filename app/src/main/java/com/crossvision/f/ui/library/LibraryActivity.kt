@@ -7,12 +7,15 @@ import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.crossvision.f.R
 import com.crossvision.f.data.repository.AppRepository
 import com.crossvision.f.databinding.ActivityLibraryBinding
 import com.crossvision.f.sync.SyncManager
 import com.crossvision.f.sync.SyncWorker
 import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 登録履歴画面
@@ -62,6 +65,16 @@ class LibraryActivity : AppCompatActivity() {
 
     private fun setupToolbar() {
         binding.toolbar.setNavigationOnClickListener { finish() }
+        binding.toolbar.inflateMenu(R.menu.menu_library)
+        binding.toolbar.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                R.id.action_export_logs -> {
+                    exportLogs()
+                    true
+                }
+                else -> false
+            }
+        }
     }
 
     private fun setupNetworkObserver() {
@@ -147,11 +160,21 @@ class LibraryActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
+                // マスターデータを強制的に最新化
+                syncManager.syncProductLabels(force = true)
+                syncManager.syncConstructionsAndProcesses()
+
                 val count = syncManager.syncPendingRegistrations()
                 if (count > 0) {
                     Snackbar.make(
                         binding.root,
                         "同期が完了しました（${count}件）",
+                        Snackbar.LENGTH_SHORT
+                    ).show()
+                } else {
+                    Snackbar.make(
+                        binding.root,
+                        "マスターデータの同期が完了しました",
                         Snackbar.LENGTH_SHORT
                     ).show()
                 }
@@ -161,6 +184,62 @@ class LibraryActivity : AppCompatActivity() {
             } finally {
                 binding.btnSync.isEnabled = true
                 observeAllData() // 表示を更新
+            }
+        }
+    }
+
+    private fun exportLogs() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val files = cacheDir.listFiles { file ->
+                    file.name.startsWith("ocr_crop_") && file.name.endsWith(".jpg")
+                } ?: emptyArray()
+
+                // logcatをファイルに出力
+                val logFile = java.io.File(cacheDir, "logcat_dump.txt")
+                try {
+                    val process = Runtime.getRuntime().exec("logcat -d -v time")
+                    process.inputStream.bufferedReader().use { reader ->
+                        logFile.writeText(reader.readText())
+                    }
+                } catch (e: Exception) {
+                    logFile.writeText("Failed to capture logcat: ${e.message}")
+                }
+
+                val allFilesToZip = files.toList() + logFile
+
+                val zipFile = java.io.File(cacheDir, "diagnostic_logs.zip")
+                java.util.zip.ZipOutputStream(java.io.FileOutputStream(zipFile)).use { zos ->
+                    allFilesToZip.forEach { file ->
+                        if (file.exists()) {
+                            java.io.FileInputStream(file).use { fis ->
+                                val entry = java.util.zip.ZipEntry(file.name)
+                                zos.putNextEntry(entry)
+                                fis.copyTo(zos)
+                                zos.closeEntry()
+                            }
+                        }
+                    }
+                }
+
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    this@LibraryActivity,
+                    applicationContext.packageName + ".provider",
+                    zipFile
+                )
+
+                withContext(Dispatchers.Main) {
+                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "application/zip"
+                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    startActivity(android.content.Intent.createChooser(intent, "ログを共有"))
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Snackbar.make(binding.root, "ログ出力エラー: ${e.message}", Snackbar.LENGTH_SHORT).show()
+                }
             }
         }
     }
