@@ -200,7 +200,6 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:minHeight="@dimen/button_height"
-            android:lines="2"
             android:text="@string/confirm_register_selected" />
 
     </LinearLayout>
