@@ -2,6 +2,47 @@
 
 ---
 
+## 🆕 prototype_saitoOCR_ver1.8 — 変更点（2026-05-27）
+
+### ver1.7 → ver1.8 変更点（斎藤案 OCR フル統合・検出アーキテクチャ刷新）
+
+> `OcrEngine.kt` を斎藤案の最新版（ver1.8 候補）に全面差し替え。  
+> `image-preprocessing` モジュールは本番 OCR パイプラインで未使用のため削除。
+
+#### OcrEngine.kt 主要変更
+
+| 項目 | ver1.7 / ver1.6.1 | **ver1.8** | 変更の目的 |
+|---|---|---|---|
+| 検出入力生成 | 単純スケール（黒/グレーパディング） | **アスペクト比保持 + 白パディング（`DetectionInput`）** | 縦横比が保たれることで DBNet の検出精度を向上 |
+| ポリゴン拡張スケール | X/Y 共通 `1.20f` | **X: `1.10f`、Y: `1.30f`（独立制御）** | 横方向は絞り、縦方向は余白確保でクロップ精度を改善 |
+| 同一行ポリゴン結合 | なし | **`mergeNearbyLinePolygons`（新規）** | 分割された文字列を認識前に1行として統合 |
+| カラーマージ制御 | なし | **`MergeColorCategory`（内部処理）** | 異なる色の領域を誤結合しないよう色で抑制 |
+| BFS `threshold` | 0.26f（ver1.6.1） | **0.18f** | 液晶・暗い環境での検出感度を再向上 |
+| BFS `minPx` | 24（ver1.6.1） | **15** | 細い文字・小さい文字の検出漏れを低減 |
+| `MAX_POLYGON_REGIONS` | 24 | **24（変更なし）** | — |
+| `MAX_REC_WIDTH` | 1920 px | **1920 px（変更なし）** | — |
+
+#### 新機能詳細
+
+**1. `DetectionInput`（アスペクト比保持スケーリング）**
+- 入力画像を `DET_SIZE×DET_SIZE`（512×512）にスケーリングする際、縦横比を保ったまま白パディングで埋める
+- パディング量（`padX`, `padY`）と縮小率（`scale`）をデータクラスで保持し、座標逆変換に正確に使用
+
+**2. `mergeNearbyLinePolygons`（同一行ポリゴン結合）**
+- DBNet のヒートマップが文字の途中で切れた場合（例：`B1Sb` と `3ON-16` に分割）を認識前に統合
+- 結合条件：縦方向の重なり率・中心Y座標の近さ・ギャップ幅・高さ比の複合判定
+- `ENABLE_LINE_POLYGON_MERGE = true` で有効化
+
+**3. `MergeColorCategory`（カラーマージ抑制）**
+- ポリゴン結合時、代表色が明らかに異なる領域同士（例：赤文字と緑文字）は結合しない内部制御
+- ユーザー向けの色選択 UI は不要（内部処理のみ）
+- `ENABLE_MERGE_COLOR_CHECK = true` で有効化
+
+#### 削除
+- `image-preprocessing/` ディレクトリ（OpenCV 検証用スタンドアロンモジュール・本番未使用）
+
+---
+
 ## 🆕 prototype_saitoOCR_ver1.7 — 変更点（2026-05-23）
 
 ### ver1.6.1 → ver1.7 変更点（親子構造化・セッション管理・サーバーデータ分割保存）
@@ -262,7 +303,11 @@ pip install zeroconf
 - `scripts/install_all.ps1`: 接続中の全端末へ debug APK を配布
 - `scripts/test_label_sync.ps1`: 同期処理を強制実行して logcat で確認
 
-## OCR エンジン詳細（斎藤案 ver1.3 / 旧バージョンからの変更点）
+## OCR エンジン詳細（斎藤案 ver1.8 / 旧バージョンからの変更点）
+
+### ver1.7 → ver1.8 変更点
+
+READMEの冒頭セクション「🆕 prototype_saitoOCR_ver1.8」を参照してください。
 
 ### ver1.2 → ver1.3 変更点
 
@@ -293,17 +338,18 @@ READMEの冒頭セクション「🆕 prototype_saitoOCR_ver1.3」を参照し�
 [カメラ / ギャラリー画像]
         │
         ▼
-① 512×512 リサイズ（createDetectionInputBitmap）
-        │  DBNet は 512×512 固定入力を想定（ver1.2 で 640 → 512 に変更）
+① アスペクト比保持スケーリング（createDetectionInputBitmap → DetectionInput）
+        │  縦横比を保ったまま 512×512 に縮小し、余白を白パディングで埋める
+        │  padX / padY / scale を DetectionInput に記録（座標逆変換に使用）
         ▼
 ② コントラスト強調（enhanceContrastForDetection）
         │  輝度レンジを線形ストレッチ（scale ≤ 2.2, bias +8）
         ▼
 ③ DBNet 推論（runDetectionModel）
-        │  各ピクセルが文字領域かの確率マップ [640×640] を生成
+        │  各ピクセルが文字領域かの確率マップ [512×512] を生成
         ▼
 ④ BFS 連結成分抽出（bfsComponents）
-        │  閾値 0.26 以上のピクセルを幅優先探索で塊に分割
+        │  閾値 0.18 以上のピクセルを幅優先探索で塊に分割（minPx=15）
         ▼
 ⑤ PCA 最小外接矩形（pcaMinRect）
         │  各塊の主軸を主成分分析で推定 → 傾いた矩形（RotatedRect）
@@ -311,28 +357,32 @@ READMEの冒頭セクション「🆕 prototype_saitoOCR_ver1.3」を参照し�
 ⑥ UNCLIP 領域拡張（unclipRect）
         │  矩形を sqrt(1.5) 倍に拡張して文字端の切れを防ぐ
         ▼
-⑦ 座標スケール変換・面積フィルタ（detectTextPolygons）
-        │  640×640 → 元画像座標へ変換、面積 < 120px² を除外
-        │  面積が大きい順に上位 24 件のみ処理
+⑦ 座標逆変換・面積フィルタ（detectTextPolygons）
+        │  DetectionInput の padX/padY/scale で元画像座標へ正確に逆変換
+        │  面積 < 120px² を除外、面積が大きい順に上位 24 件のみ処理
         ▼
-⑧ ポリゴン拡張 1.55 倍（expandPolygon）
-        │  重心から各頂点を 1.55 倍に広げる（文字余白を確保）
+⑧ 同一行ポリゴン結合（mergeNearbyLinePolygons）※ver1.8 新規
+        │  縦方向の重なり率・中心Y・ギャップ幅・色の複合判定で隣接ポリゴンを統合
+        │  代表色が明らかに異なる領域は結合しない（MergeColorCategory による抑制）
         ▼
-⑨ 射影変換クロップ（safePerspectiveCrop）
+⑨ ポリゴン拡張（expandPolygon）
+        │  X 方向 1.10 倍、Y 方向 1.30 倍（独立スケール）で文字余白を確保
+        ▼
+⑩ 射影変換クロップ（safePerspectiveCrop）
         │  4 頂点→正面向きの長方形に変換（Matrix.setPolyToPoly）
         │  例外時はバウンディングボックスでフォールバック
         ▼
-⑩ 画質フィルタ（isUsefulCropForOcr）
+⑪ 画質フィルタ（isUsefulCropForOcr）
         │  真っ白・情報量ゼロのクロップを早期スキップ
         ▼
-⑪ 縦長正規化（normalizeToHorizontal）
+⑫ 縦長正規化（normalizeToHorizontal）
         │  height > width × 1.2 なら 90° 回転して横向きに統一
         ▼
-⑫ 向き比較認識（recognizeBestOrientationWithTiming）
+⑬ 向き比較認識（recognizeBestOrientationWithTiming）
         │  0° で認識 → 十分な信頼度なら早期終了
         │  不足なら 180° でも認識してスコアで比較・採用
         ▼
-⑬ 認識後テキストフィルタ（isUsefulOcrResult）
+⑭ 認識後テキストフィルタ（isUsefulOcrResult）
         │  空文字・記号のみ・低品質な結果を除外
         ▼
 [OcrDetectionItem リストとして返却]
@@ -380,9 +430,9 @@ DBNet モデルは ImageNet で事前学習されているため、同じ正規�
 
 | パラメータ | 値 | 意味 |
 |---|---|---|
-| `threshold` | `0.26f` | この値より大きいピクセルを「文字の可能性あり」として扱う |
-| `minPx` | `24` | 連結成分として認める最小ピクセル数（これ未満はノイズとして除外） |
-| 最大領域数 | `12`（ver1.1 は 24） | 面積が大きい順に上位 12 件のみ処理（処理時間の上限を設ける）|
+| `threshold` | `0.18f` | この値より大きいピクセルを「文字の可能性あり」として扱う |
+| `minPx` | `15` | 連結成分として認める最小ピクセル数（これ未満はノイズとして除外） |
+| 最大領域数 | `24` | 面積が大きい順に上位 24 件のみ処理（処理時間の上限を設ける）|
 | 最小面積 | `120px²` | 極小のゴミ領域を除外（BFS 後の追加フィルタ） |
 
 ---
@@ -399,7 +449,7 @@ DBNet の出力は「確率の高いピクセルの塊」であり、文字が�
 4. 主軸方向に射影して min/max から矩形の幅 w・高さ h を決定
 ```
 
-> UNCLIP 後に `expandPolygon(scale=1.55)` でさらに拡大することで、
+> UNCLIP 後に `expandPolygon(scaleX=1.10, scaleY=1.30)` でさらに拡大することで、
 > 文字周囲に十分な余白を確保して認識精度を向上させている。
 
 ---
@@ -523,7 +573,7 @@ score = confidence × 0.80          // 信頼度（重み 80%）
 
 | 項目 | 現在値 | 定義箇所 |
 |---|---|---|
-| Android package (debug) | `com.crossvision.f.debug` | `app/build.gradle.kts` |
+| Android package (debug) | `com.crossvision.f.saito18` | `app/build.gradle.kts` |
 | Server port | `5000` | `server/main.py` |
 | API header | `X-API-KEY` | `server/main.py`, `RetrofitClient.kt` |
 | API key value | `cvf_7s_9922_zrkp_8x11` | `server/main.py`, `RetrofitClient.kt` |

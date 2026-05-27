@@ -21,9 +21,9 @@ android {
     buildTypes {
         debug {
             // デバッグビルドは ID にサフィックスを付けて既存アプリと共存できるようにする
-            applicationIdSuffix = ".debug"
-            versionNameSuffix = "-debug"
-            resValue("string", "app_name_suffix", "鉄骨認識(dev)")
+            applicationIdSuffix = ".saito18"
+            versionNameSuffix = "-saito-ver1.8"
+            resValue("string", "app_name_suffix", "鉄骨認識(saito v1.8)")
         }
         release {
             isMinifyEnabled = false
