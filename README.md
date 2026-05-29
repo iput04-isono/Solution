@@ -599,7 +599,7 @@ score = confidence × 0.80          // 信頼度（重み 80%）
 
 | 項目 | 現在値 | 定義箇所 |
 |---|---|---|
-| Android package (debug) | `com.crossvision.f.saito18` | `app/build.gradle.kts` |
+| Android package (debug) | `com.crossvision.f.saito19` | `app/build.gradle.kts` |
 | Server port | `5000` | `server/main.py` |
 | API header | `X-API-KEY` | `server/main.py`, `RetrofitClient.kt` |
 | API key value | `cvf_7s_9922_zrkp_8x11` | `server/main.py`, `RetrofitClient.kt` |
