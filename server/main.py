@@ -3,7 +3,7 @@
 起動方法: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 """
 
-from fastapi import FastAPI, Response, Security, HTTPException, Depends, UploadFile, File
+from fastapi import FastAPI, Response, Security, HTTPException, Depends, UploadFile, File, Query
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
@@ -157,8 +157,12 @@ def delete_product_label(code: str, api_key: str = Depends(get_api_key)):
     return {"success": True}
 
 @app.post("/api/product-labels/import")
-def import_product_labels(file: UploadFile = File(...), api_key: str = Depends(get_api_key)):
-    content = file.file.read().decode("utf-8-sig") # BOM付きにも対応
+def import_product_labels(
+    file: UploadFile = File(...),
+    mode: str = Query("replace", regex="^(replace|diff)$"),
+    api_key: str = Depends(get_api_key)
+):
+    content = file.file.read().decode("utf-8-sig")  # BOM対応
     labels = []
     reader = csv.reader(io.StringIO(content))
     # ヘッダーがあるかもしれないが、1列目だけ取れればOKとする
@@ -171,10 +175,26 @@ def import_product_labels(file: UploadFile = File(...), api_key: str = Depends(g
             cleaned = normalize_product_code(raw_code)
             if cleaned:
                 labels.append(cleaned)
-    # 洗い替え
-    unique_labels = list(set(labels))
-    save_json_list(PRODUCT_LABELS_FILE, unique_labels)
-    return {"success": True, "count": len(unique_labels)}
+    if mode == "replace":
+        # 洗い替え
+        unique_labels = list(set(labels))
+        save_json_list(PRODUCT_LABELS_FILE, unique_labels)
+        return {"success": True, "count": len(unique_labels), "skipped": 0}
+    else:
+        # 差分インポート
+        existing = load_json_list(PRODUCT_LABELS_FILE, [])
+        existing_set = set(existing)
+        new_labels = []
+        skipped = 0
+        for lbl in labels:
+            if lbl in existing_set:
+                skipped += 1
+            else:
+                existing_set.add(lbl)
+                new_labels.append(lbl)
+        if new_labels:
+            save_json_list(PRODUCT_LABELS_FILE, list(existing_set))
+        return {"success": True, "count": len(new_labels), "skipped": skipped}
 
 @app.get("/api/export/product-labels/csv")
 def export_product_labels_csv():
@@ -215,16 +235,37 @@ def delete_construction(cid: int, api_key: str = Depends(get_api_key)):
     return {"success": True}
 
 @app.post("/api/constructions/import")
-def import_constructions(file: UploadFile = File(...), api_key: str = Depends(get_api_key)):
+def import_constructions(
+    file: UploadFile = File(...),
+    mode: str = Query("replace", regex="^(replace|diff)$"),
+    api_key: str = Depends(get_api_key)
+):
     content = file.file.read().decode("utf-8-sig")
     data = []
     reader = csv.reader(io.StringIO(content))
     header = next(reader, None)
     for i, row in enumerate(reader, start=1):
         if len(row) >= 2:
-            data.append({"id": i, "name": row[0].strip(), "code": row[1].strip(), "isActive": True})
-    save_json_list(CONSTRUCTIONS_FILE, data)
-    return {"success": True, "count": len(data)}
+            name = row[0].strip()
+            code = row[1].strip()
+            if not name or not code:
+                continue
+            data.append({"id": i, "name": name, "code": code, "isActive": True})
+    if mode == "replace":
+        save_json_list(CONSTRUCTIONS_FILE, data)
+        return {"success": True, "count": len(data)}
+    else:
+        existing = load_json_list(CONSTRUCTIONS_FILE, [])
+        existing_codes = {c["code"] for c in existing}
+        new_items = []
+        for item in data:
+            if item["code"] in existing_codes:
+                continue
+            existing.append(item)
+            new_items.append(item)
+        if new_items:
+            save_json_list(CONSTRUCTIONS_FILE, existing)
+        return {"success": True, "count": len(new_items), "skipped": len(data) - len(new_items)}
 
 @app.get("/api/processes")
 def get_processes():
@@ -265,7 +306,11 @@ def delete_process(pid: int, api_key: str = Depends(get_api_key)):
     return {"success": True}
 
 @app.post("/api/processes/import")
-def import_processes(file: UploadFile = File(...), api_key: str = Depends(get_api_key)):
+def import_processes(
+    file: UploadFile = File(...),
+    mode: str = Query("replace", regex="^(replace|diff)$"),
+    api_key: str = Depends(get_api_key)
+):
     content = file.file.read().decode("utf-8-sig")
     data = []
     reader = csv.reader(io.StringIO(content))
@@ -276,9 +321,27 @@ def import_processes(file: UploadFile = File(...), api_key: str = Depends(get_ap
                 cid = int(row[0].strip())
             except:
                 cid = 1
-            data.append({"id": i, "constructionId": cid, "name": row[1].strip(), "code": row[2].strip(), "isActive": True})
-    save_json_list(PROCESSES_FILE, data)
-    return {"success": True, "count": len(data)}
+            name = row[1].strip()
+            code = row[2].strip()
+            if not name or not code:
+                continue
+            data.append({"id": i, "constructionId": cid, "name": name, "code": code, "isActive": True})
+    if mode == "replace":
+        save_json_list(PROCESSES_FILE, data)
+        return {"success": True, "count": len(data)}
+    else:
+        existing = load_json_list(PROCESSES_FILE, [])
+        existing_keys = {(p["constructionId"], p["code"]) for p in existing}
+        new_items = []
+        for item in data:
+            key = (item["constructionId"], item["code"])
+            if key in existing_keys:
+                continue
+            existing.append(item)
+            new_items.append(item)
+        if new_items:
+            save_json_list(PROCESSES_FILE, existing)
+        return {"success": True, "count": len(new_items), "skipped": len(data) - len(new_items)}
 
 @app.delete("/api/registrations/{entry_id}", response_model=RegistrationResponse)
 def delete_registration(entry_id: int, api_key: str = Depends(get_api_key)):

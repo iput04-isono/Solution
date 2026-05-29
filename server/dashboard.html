@@ -221,6 +221,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--red);cursor:point
         <div class="upload-form">
           <input type="file" id="uploadProductCsv" accept=".csv" />
           <button class="btn btn-outline" onclick="uploadCsv('product-labels', 'uploadProductCsv', fetchProducts)">CSVインポート (洗い替え)</button>
+          <button class="btn btn-outline" onclick="uploadCsv('product-labels', 'uploadProductCsv', fetchProducts, 'diff')">CSVインポート (差分)</button>
           <button class="btn btn-outline" onclick="exportProductLabelsCsv()">⬇ CSV出力</button>
         </div>
       </div>
@@ -249,6 +250,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--red);cursor:point
         <div class="upload-form">
           <input type="file" id="uploadConstCsv" accept=".csv" />
           <button class="btn btn-outline" onclick="uploadCsv('constructions', 'uploadConstCsv', fetchConstructions)">CSVインポート (洗い替え)</button>
+          <button class="btn btn-outline" onclick="uploadCsv('constructions', 'uploadConstCsv', fetchConstructions, 'diff')">CSVインポート (差分)</button>
         </div>
       </div>
       <section class="table-section">
@@ -279,6 +281,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--red);cursor:point
         <div class="upload-form">
           <input type="file" id="uploadProcCsv" accept=".csv" />
           <button class="btn btn-outline" onclick="uploadCsv('processes', 'uploadProcCsv', fetchProcesses)">CSVインポート (洗い替え)</button>
+          <button class="btn btn-outline" onclick="uploadCsv('processes', 'uploadProcCsv', fetchProcesses, 'diff')">CSVインポート (差分)</button>
         </div>
       </div>
       <section class="table-section">
