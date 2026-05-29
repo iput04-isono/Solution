@@ -253,6 +253,10 @@ CrossVisionF/
 
 - **UI層**: `login` -> `process` -> `recognize` -> `confirm` の流れで登録操作を実行
 - **OCR層**: `OcrEngine`, `OcrProcessor`, `ImagePreprocessor`, `LabelMatcher` による認識・照合
+  - **エンジンの共通化**: リアルタイムプレビュー（`CameraActivity`）と撮影後の静止画認識（`RecognizeActivity`）は、どちらも同一のOCRエンジン（`OcrEngine`）および前処理（`ImagePreprocessor`）のプロセスを共有して実行します（`OcrProcessor`のシングルトンインスタンスを経由）。これにより、両画面で読み取り精度やアルゴリズムにブレが発生しないように設計されています。
+  - **処理の差分**: 
+    - リアルタイムプレビュー時（`recognizeText`）: 画面の軽快さを最優先するため、ポリゴン（認識エリアの枠）検出数を制限し、切り抜き画像の保存や枠線描画などの重い処理をスキップします。
+    - 静止画認識時（`recognizeWithOverlay`）: 保存前の確定・確認処理の正確さを最優先するため、検出領域を枠線で囲んだオーバーレイ画像を生成し、認識に使用した文字領域の切り抜き（クロップ画像）を一時キャッシュファイルとして保存してUIに引き渡します。
 - **データ層**: Room (`AppDatabase`, `RegistrationDao`, `ProductLabelDao` など) と Retrofit (`ApiService`)
 - **同期層**: `SyncWorker` が15分間隔で定期同期、`SyncManager` が送受信を実施
 - **自動発見**: `NsdHelper` が `_crossvision._tcp` を探索してサーバー接続先を取得
