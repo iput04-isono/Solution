@@ -187,32 +187,39 @@
 
 ```mermaid
 flowchart LR
-    subgraph androidSide[AndroidApp]
+    subgraph androidSide["AndroidApp (端末側アプリ)"]
         direction TB
         UiFlow["UI Flow: Login -> Process -> Recognize -> Confirm"]
-        CameraInput["Camera/Gallery Input"]
-        OcrPipeline["OCR Pipeline: Preprocess -> Detect -> Recognize -> Match"]
-        LocalDb["RoomDB: registrations/product_labels/constructions/processes"]
-        SyncWorker["SyncWorker (15min interval)"]
-        SyncManager["SyncManager"]
-        ApiClient["RetrofitClient"]
-        NsdHelper["NsdHelper (mDNS discovery)"]
+        CameraInput["カメラ/ギャラリー入力"]
+        OcrPipeline["OCRパイプライン (文字認識処理)"]
+        LocalDb["Room DB (端末内データベース)"]
+        SyncWorker["SyncWorker (定期同期・手動同期)"]
+        SyncManager["SyncManager (同期制御)"]
+        ApiClient["RetrofitClient (HTTP通信クライアント)"]
+        NsdHelper["NsdHelper (mDNSサーバー自動発見)"]
     end
 
-    subgraph networkLayer[LocalNetwork]
+    subgraph networkLayer["LocalNetwork (同一ネットワーク内 LAN)"]
         direction TB
-        MdnsService["mDNS Service: _crossvision._tcp.local."]
-        HttpApi["HTTP API channel"]
+        MdnsService["mDNS サービス広告: _crossvision._tcp.local."]
+        HttpApi["HTTP API 通信チャネル"]
+        ApkDownloadChannel["APKファイルダウンロード経路"]
     end
 
-    subgraph serverSide[FastAPIServer]
+    subgraph serverSide["FastAPIServer (PCサーバー側)"]
         direction TB
-        ApiEndpoints["API Endpoints: registrations/product-labels/constructions/processes/export"]
-        ApiKeyAuth["API Key Auth: X-API-KEY"]
-        JsonStorage["JSON Storage: registrations/product_labels/constructions/processes"]
-        AdminDashboard["Admin Dashboard (/admin)"]
-        CsvExport["CSV Export (/api/export/csv)"]
-        ZeroconfAdvertise["Zeroconf Advertisement"]
+        ApiEndpoints["APIエンドポイント (/api/registrations 等)"]
+        ApiKeyAuth["APIキー認証 (X-API-KEY)"]
+        JsonStorage["JSONストレージ (JSONファイルによるデータ保存)"]
+        AdminDashboard["管理用ダッシュボード (/admin, /)"]
+        CsvImportExport["CSVインポート/エクスポート (洗い替え・差分対応)"]
+        AppDelivery["アプリダウンロード用ページ (/download)"]
+        ZeroconfAdvertise["Zeroconf (mDNS) サービス起動"]
+    end
+
+    subgraph browserSide["Browser (PC/スマホブラウザ)"]
+        AdminBrowser["管理者用ブラウザ"]
+        DownloadBrowser["アプリ設置用ブラウザ"]
     end
 
     CameraInput --> OcrPipeline
@@ -222,15 +229,21 @@ flowchart LR
     SyncWorker --> SyncManager
     SyncManager --> ApiClient
 
-    ApiClient -->|"POST/GET sync"| HttpApi
+    ApiClient -->|"POST/GET 同期リクエスト"| HttpApi
     HttpApi --> ApiEndpoints
     ApiEndpoints --> ApiKeyAuth
     ApiEndpoints --> JsonStorage
-    ApiEndpoints --> CsvExport
-    ApiEndpoints --> AdminDashboard
 
-    NsdHelper -->|"discover"| MdnsService
-    ZeroconfAdvertise -->|"advertise"| MdnsService
+    AdminBrowser -->|"管理画面操作 / CSV入出力"| AdminDashboard
+    AdminDashboard --> CsvImportExport
+    CsvImportExport --> JsonStorage
+
+    DownloadBrowser -->|"QRコードからアクセス"| AppDelivery
+    AppDelivery -->|"APKファイル要求"| ApkDownloadChannel
+    ApkDownloadChannel -->|"app.apk の配信"| DownloadBrowser
+
+    NsdHelper -->|"discover (サーバー自動発見)"| MdnsService
+    ZeroconfAdvertise -->|"advertise (サービス情報の広告)"| MdnsService
 ```
 
 ## リポジトリ構成
