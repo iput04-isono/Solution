@@ -5,7 +5,7 @@
 
 from fastapi import FastAPI, Response, Security, HTTPException, Depends, UploadFile, File
 from fastapi.security.api_key import APIKeyHeader
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
@@ -304,6 +304,27 @@ def bulk_delete_registrations(req: BulkDeleteRequest, api_key: str = Depends(get
     print(f"[一括削除] {deleted_count}件削除 IDs={sorted(id_set)}")
     return RegistrationResponse(success=True, message=f"{deleted_count}件を削除しました")
 
+@app.get("/download/app.apk")
+def download_apk():
+    """APKファイルをダウンロードするエンドポイント"""
+    apk_path = os.path.join(BASE_DIR, "app.apk")
+    if not os.path.exists(apk_path):
+        raise HTTPException(status_code=404, detail="APKファイルがサーバー上に見つかりません。")
+    return FileResponse(apk_path, media_type="application/vnd.android.package-archive", filename="app.apk")
+
+@app.get("/api/server-info")
+def get_server_info():
+    """サーバーのローカルIPとポートを返すAPI"""
+    hostname = socket.gethostname()
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        local_ip = socket.gethostbyname(hostname)
+    return {"local_ip": local_ip, "port": 5000}
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -336,6 +357,15 @@ def dashboard():
         with open(file_path, "r", encoding="utf-8") as f:
             return f.read()
     return "dashboard.html not found"
+
+@app.get("/download", response_class=HTMLResponse)
+def download_page():
+    """アプリダウンロード専用ページのHTMLをファイルから読み込んで返す"""
+    file_path = os.path.join(BASE_DIR, "download.html")
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "download.html not found"
 # ── 自動発見 (mDNS/Zeroconf) 配信 ────────────────────────
 
 class DiscoveryServer:
@@ -386,9 +416,20 @@ if __name__ == "__main__":
     # ポート5000で起動 (Androidアプリのデフォルト)
     port = 5000
     
+    # 起動時のIP取得処理
+    hostname = socket.gethostname()
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        local_ip = socket.gethostbyname(hostname)
+
     print("==================================================")
     print("CrossVision F 管理サーバー 起動中")
     print(f"管理画面: http://localhost:{port}/admin")
+    print(f"アプリダウンロード用URL: http://{local_ip}:{port}/download")
     print("APIキー認証と、自動発見サービスが有効です")
     print("==================================================")
     
