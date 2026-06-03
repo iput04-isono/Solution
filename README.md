@@ -187,70 +187,70 @@
 
 ```mermaid
 flowchart LR
-    subgraph androidSide["AndroidApp (端末側アプリ)"]
+    subgraph androidSide["Android端末 (アプリ側)"]
         direction TB
-        UiFlow["UI Flow: Login -> Process -> Recognize -> Confirm\n(Process <--> Library: 履歴確認・手動同期)"]
-        CameraInput["カメラ/ギャラリー入力"]
-        OcrPipeline["OCRパイプライン (文字認識処理)"]
-        LocalDb["Room DB (端末内データベース)"]
-        SyncWorker["SyncWorker (定期同期・手動同期)"]
-        SyncManager["SyncManager (同期制御)"]
-        ApiClient["RetrofitClient (HTTP通信クライアント)"]
-        NsdHelper["NsdHelper (mDNSサーバー自動発見)"]
-        FileProvider["FileProvider (診断ログZIPエクスポート)"]
+        UiFlow["画面遷移: ログイン -> 工程選択 -> 画像認識 -> 登録確認\n(工程選択 <--> 登録履歴: 履歴確認・手動同期)"]
+        CameraInput["カメラ / ギャラリー入力"]
+        OcrPipeline["文字認識処理エンジン (OCR)"]
+        LocalDb["端末内データベース (Room)"]
+        SyncWorker["バックグラウンド通信 (定期・手動同期)"]
+        SyncManager["データ送信・同期の管理"]
+        ApiClient["サーバー通信プログラム (HTTPクライアント)"]
+        NsdHelper["接続先サーバーの自動探索 (mDNS)"]
+        FileProvider["診断ログファイルの出力 (ZIP生成)"]
     end
 
-    subgraph networkLayer["LocalNetwork (同一ネットワーク内 LAN)"]
+    subgraph networkLayer["社内ネットワーク (LAN / Wi-Fi)"]
         direction TB
-        MdnsService["mDNS サービス広告: _crossvision._tcp.local."]
-        HttpApi["HTTP API 通信チャネル"]
-        ApkDownloadChannel["APKファイルダウンロード経路"]
+        MdnsService["サーバー位置の自動通知機能 (mDNS)"]
+        HttpApi["サーバーとの通信経路 (HTTP API)"]
+        ApkDownloadChannel["アプリ(APK)ダウンロード経路"]
     end
 
-    subgraph serverSide["FastAPIServer (PCサーバー側)"]
+    subgraph serverSide["PCサーバー (FastAPI)"]
         direction TB
-        ApiEndpoints["APIエンドポイント (/api/registrations 等)"]
-        ApiKeyAuth["APIキー認証 (X-API-KEY)"]
-        JsonStorage["JSONストレージ (JSONファイルによるデータ保存)"]
-        AdminDashboard["管理用ダッシュボード (/admin, /)"]
-        CsvImportExport["CSVインポート/エクスポート (洗い替え・差分対応)"]
-        AppDelivery["アプリダウンロード用ページ (/download)"]
-        ZeroconfAdvertise["Zeroconf (mDNS) サービス起動"]
+        ApiEndpoints["データ受付窓口 (APIエンドポイント)"]
+        ApiKeyAuth["暗証番号による認証 (APIキー)"]
+        JsonStorage["ファイルへのデータ保存 (JSON形式)"]
+        AdminDashboard["管理者用ダッシュボード画面"]
+        CsvImportExport["CSVデータの入出力 (一括更新・差分追加)"]
+        AppDelivery["アプリ配布用Webページ"]
+        ZeroconfAdvertise["ネットワークへのサーバー存在通知 (Zeroconf)"]
     end
 
-    subgraph browserSide["Browser (PC/スマホブラウザ)"]
+    subgraph browserSide["PC・スマホ (Webブラウザ)"]
         AdminBrowser["管理者用ブラウザ"]
         DownloadBrowser["アプリ設置用ブラウザ"]
     end
 
-    subgraph externalApp["External (外部アプリ)"]
-        ShareSheet["Android共有シート (メール等)"]
+    subgraph externalApp["外部のアプリ"]
+        ShareSheet["Android共有シート (メール・チャット等)"]
     end
 
     CameraInput --> OcrPipeline
     UiFlow --> CameraInput
-    UiFlow -.->|"ログ出力"| FileProvider
-    FileProvider -->|"ZIP共有"| ShareSheet
+    UiFlow -.->|"エラー時・手動出力"| FileProvider
+    FileProvider -->|"ZIPデータ共有"| ShareSheet
     OcrPipeline --> LocalDb
     LocalDb --> SyncWorker
     SyncWorker --> SyncManager
     SyncManager --> ApiClient
 
-    ApiClient -->|"POST/GET 同期リクエスト"| HttpApi
+    ApiClient -->|"データの送受信要求"| HttpApi
     HttpApi --> ApiEndpoints
     ApiEndpoints --> ApiKeyAuth
     ApiEndpoints --> JsonStorage
 
-    AdminBrowser -->|"管理画面操作 / CSV入出力"| AdminDashboard
+    AdminBrowser -->|"管理画面の操作 / CSV入出力"| AdminDashboard
     AdminDashboard --> CsvImportExport
     CsvImportExport --> JsonStorage
 
-    DownloadBrowser -->|"QRコードからアクセス"| AppDelivery
-    AppDelivery -->|"APKファイル要求"| ApkDownloadChannel
-    ApkDownloadChannel -->|"app.apk の配信"| DownloadBrowser
+    DownloadBrowser -->|"QRコードを読み取ってアクセス"| AppDelivery
+    AppDelivery -->|"APKファイルの要求"| ApkDownloadChannel
+    ApkDownloadChannel -->|"アプリ(app.apk)の配信"| DownloadBrowser
 
-    NsdHelper -->|"discover (サーバー自動発見)"| MdnsService
-    ZeroconfAdvertise -->|"advertise (サービス情報の広告)"| MdnsService
+    NsdHelper -->|"サーバーの自動探索"| MdnsService
+    ZeroconfAdvertise -->|"サーバー存在の通知"| MdnsService
 ```
 
 ## リポジトリ構成
