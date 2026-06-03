@@ -189,7 +189,7 @@
 flowchart LR
     subgraph androidSide["AndroidApp (端末側アプリ)"]
         direction TB
-        UiFlow["UI Flow: Login -> Process -> Recognize -> Confirm"]
+        UiFlow["UI Flow: Login -> Process -> Recognize -> Confirm\n(Process <--> Library: 履歴確認・手動同期)"]
         CameraInput["カメラ/ギャラリー入力"]
         OcrPipeline["OCRパイプライン (文字認識処理)"]
         LocalDb["Room DB (端末内データベース)"]
@@ -197,6 +197,7 @@ flowchart LR
         SyncManager["SyncManager (同期制御)"]
         ApiClient["RetrofitClient (HTTP通信クライアント)"]
         NsdHelper["NsdHelper (mDNSサーバー自動発見)"]
+        FileProvider["FileProvider (診断ログZIPエクスポート)"]
     end
 
     subgraph networkLayer["LocalNetwork (同一ネットワーク内 LAN)"]
@@ -222,8 +223,14 @@ flowchart LR
         DownloadBrowser["アプリ設置用ブラウザ"]
     end
 
+    subgraph externalApp["External (外部アプリ)"]
+        ShareSheet["Android共有シート (メール等)"]
+    end
+
     CameraInput --> OcrPipeline
     UiFlow --> CameraInput
+    UiFlow -.->|"ログ出力"| FileProvider
+    FileProvider -->|"ZIP共有"| ShareSheet
     OcrPipeline --> LocalDb
     LocalDb --> SyncWorker
     SyncWorker --> SyncManager
