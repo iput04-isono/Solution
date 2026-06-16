@@ -159,7 +159,7 @@ def delete_product_label(code: str, api_key: str = Depends(get_api_key)):
 @app.post("/api/product-labels/import")
 def import_product_labels(
     file: UploadFile = File(...),
-    mode: str = Query("replace", regex="^(replace|diff)$"),
+    mode: str = Query("replace", pattern="^(replace|diff)$"),
     api_key: str = Depends(get_api_key)
 ):
     content = file.file.read().decode("utf-8-sig")  # BOM対応
@@ -237,7 +237,7 @@ def delete_construction(cid: int, api_key: str = Depends(get_api_key)):
 @app.post("/api/constructions/import")
 def import_constructions(
     file: UploadFile = File(...),
-    mode: str = Query("replace", regex="^(replace|diff)$"),
+    mode: str = Query("replace", pattern="^(replace|diff)$"),
     api_key: str = Depends(get_api_key)
 ):
     content = file.file.read().decode("utf-8-sig")
@@ -308,7 +308,7 @@ def delete_process(pid: int, api_key: str = Depends(get_api_key)):
 @app.post("/api/processes/import")
 def import_processes(
     file: UploadFile = File(...),
-    mode: str = Query("replace", regex="^(replace|diff)$"),
+    mode: str = Query("replace", pattern="^(replace|diff)$"),
     api_key: str = Depends(get_api_key)
 ):
     content = file.file.read().decode("utf-8-sig")
@@ -433,9 +433,9 @@ def download_page():
 
 class DiscoveryServer:
     def __init__(self, port):
-        self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
         self.port = port
         self.service_info = None
+        self.zeroconf = None
 
     def start(self):
         try:
@@ -447,6 +447,9 @@ class DiscoveryServer:
                 s.close()
             except Exception:
                 local_ip = socket.gethostbyname(hostname)
+
+            # 特定のIPアドレスのみにバインドし、WSL等の仮想NICによる起動遅延を回避
+            self.zeroconf = Zeroconf(interfaces=[local_ip], ip_version=IPVersion.V4Only)
 
             # サービス名: SevenStarServer (Androidアプリ側がこの名前を探します)
             desc = {"version": "1.0", "name": "CrossVision-F-Server"}
@@ -466,9 +469,10 @@ class DiscoveryServer:
 
     def stop(self):
         try:
-            if self.service_info:
+            if self.service_info and self.zeroconf:
                 self.zeroconf.unregister_service(self.service_info)
-            self.zeroconf.close()
+            if self.zeroconf:
+                self.zeroconf.close()
         except:
             pass
 
