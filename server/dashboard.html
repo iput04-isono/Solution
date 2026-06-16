@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>鉄骨認識 ダッシュボード</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -56,6 +57,9 @@ body{font-family:'Segoe UI','Helvetica Neue',sans-serif;background:var(--bg);col
 
 /* カード */
 .cards{display:grid;grid-template-columns:1fr;gap:16px}
+@media (min-width: 768px) {
+  .cards{grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));}
+}
 .card{background:var(--surface);border-radius:var(--radius);padding:20px;display:flex;align-items:center;gap:16px;box-shadow:var(--shadow);border-top:3px solid transparent;transition:transform .15s}
 .card:hover{transform:translateY(-2px)}
 .card-blue{border-color:var(--blue)}.card-green{border-color:var(--green)}.card-red{border-color:var(--red)}.card-yellow{border-color:var(--yellow)}
@@ -163,6 +167,18 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--red);cursor:point
     <main class="content">
       <section class="cards">
         <div class="card card-blue">  <div class="card-icon">📦</div><div class="card-body"><div class="card-label">総登録件数</div><div class="card-value" id="cTotal">—</div></div></div>
+        <div class="card card-green" style="display: flex; justify-content: space-between; align-items: center; min-height: 100px;">
+          <div style="flex: 1; min-width: 0;">
+            <div class="card-label">Androidアプリ ダウンロード</div>
+            <div style="font-size: 11px; color: var(--muted); margin-bottom: 6px; line-height: 1.4;">
+              同一Wi-Fi内の端末でQRコードをスキャンしてインストール
+            </div>
+            <a id="download-link-text" href="#" target="_blank" style="font-size: 11px; color: var(--blue); text-decoration: underline; word-break: break-all; font-family: monospace;">取得中...</a>
+          </div>
+          <div id="qrcode" style="padding: 4px; background: #fff; border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; width: 88px; height: 88px; flex-shrink: 0; margin-left: 12px;">
+            <!-- QRコード描画エリア -->
+          </div>
+        </div>
       </section>
       <section class="filter-bar">
         <div class="filter-group"><label class="filter-label">日付</label><input type="date" id="filterDate" class="filter-input"/></div>
@@ -205,6 +221,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--red);cursor:point
         <div class="upload-form">
           <input type="file" id="uploadProductCsv" accept=".csv" />
           <button class="btn btn-outline" onclick="uploadCsv('product-labels', 'uploadProductCsv', fetchProducts)">CSVインポート (洗い替え)</button>
+          <button class="btn btn-outline" onclick="uploadCsv('product-labels', 'uploadProductCsv', fetchProducts, 'diff')">CSVインポート (差分)</button>
           <button class="btn btn-outline" onclick="exportProductLabelsCsv()">⬇ CSV出力</button>
         </div>
       </div>
@@ -233,6 +250,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--red);cursor:point
         <div class="upload-form">
           <input type="file" id="uploadConstCsv" accept=".csv" />
           <button class="btn btn-outline" onclick="uploadCsv('constructions', 'uploadConstCsv', fetchConstructions)">CSVインポート (洗い替え)</button>
+          <button class="btn btn-outline" onclick="uploadCsv('constructions', 'uploadConstCsv', fetchConstructions, 'diff')">CSVインポート (差分)</button>
         </div>
       </div>
       <section class="table-section">
@@ -263,6 +281,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--red);cursor:point
         <div class="upload-form">
           <input type="file" id="uploadProcCsv" accept=".csv" />
           <button class="btn btn-outline" onclick="uploadCsv('processes', 'uploadProcCsv', fetchProcesses)">CSVインポート (洗い替え)</button>
+          <button class="btn btn-outline" onclick="uploadCsv('processes', 'uploadProcCsv', fetchProcesses, 'diff')">CSVインポート (差分)</button>
         </div>
       </div>
       <section class="table-section">
@@ -636,7 +655,40 @@ document.querySelectorAll('th.sortable').forEach(th=>th.addEventListener('click'
 // モーダルの外側クリックで閉じる
 document.getElementById('modalOverlay').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeModal(); });
 
+let qrcodeInstance = null;
+
+async function initQrcode() {
+  try {
+    const res = await fetch('/api/server-info');
+    if (!res.ok) throw new Error('サーバー情報の取得に失敗しました');
+    const info = await res.json();
+    const downloadUrl = `http://${info.local_ip}:${info.port}/download/app.apk`;
+    
+    const linkEl = document.getElementById("download-link-text");
+    linkEl.textContent = downloadUrl;
+    linkEl.href = downloadUrl;
+
+    const qrContainer = document.getElementById("qrcode");
+    qrContainer.innerHTML = ""; // 初期化
+    
+    qrcodeInstance = new QRCode(qrContainer, {
+      text: downloadUrl,
+      width: 80,
+      height: 80,
+      colorDark : "#1e2340",
+      colorLight : "#ffffff",
+      correctLevel : QRCode.CorrectLevel.M
+    });
+  } catch (e) {
+    console.error("QRコードの生成に失敗しました:", e);
+    const linkEl = document.getElementById("download-link-text");
+    linkEl.textContent = "QRコード生成エラー";
+    linkEl.style.color = "var(--red)";
+  }
+}
+
 fetchData();
+initQrcode();
 setInterval(()=>{
   // ダッシュボードがアクティブな時だけ自動更新
   if(document.getElementById('view-dashboard').classList.contains('active')){

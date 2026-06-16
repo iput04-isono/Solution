@@ -3,9 +3,9 @@
 起動方法: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 """
 
-from fastapi import FastAPI, Response, Security, HTTPException, Depends, UploadFile, File
+from fastapi import FastAPI, Response, Security, HTTPException, Depends, UploadFile, File, Query
 from fastapi.security.api_key import APIKeyHeader
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
@@ -157,8 +157,12 @@ def delete_product_label(code: str, api_key: str = Depends(get_api_key)):
     return {"success": True}
 
 @app.post("/api/product-labels/import")
-def import_product_labels(file: UploadFile = File(...), api_key: str = Depends(get_api_key)):
-    content = file.file.read().decode("utf-8-sig") # BOM付きにも対応
+def import_product_labels(
+    file: UploadFile = File(...),
+    mode: str = Query("replace", pattern="^(replace|diff)$"),
+    api_key: str = Depends(get_api_key)
+):
+    content = file.file.read().decode("utf-8-sig")  # BOM対応
     labels = []
     reader = csv.reader(io.StringIO(content))
     # ヘッダーがあるかもしれないが、1列目だけ取れればOKとする
@@ -171,10 +175,26 @@ def import_product_labels(file: UploadFile = File(...), api_key: str = Depends(g
             cleaned = normalize_product_code(raw_code)
             if cleaned:
                 labels.append(cleaned)
-    # 洗い替え
-    unique_labels = list(set(labels))
-    save_json_list(PRODUCT_LABELS_FILE, unique_labels)
-    return {"success": True, "count": len(unique_labels)}
+    if mode == "replace":
+        # 洗い替え
+        unique_labels = list(set(labels))
+        save_json_list(PRODUCT_LABELS_FILE, unique_labels)
+        return {"success": True, "count": len(unique_labels), "skipped": 0}
+    else:
+        # 差分インポート
+        existing = load_json_list(PRODUCT_LABELS_FILE, [])
+        existing_set = set(existing)
+        new_labels = []
+        skipped = 0
+        for lbl in labels:
+            if lbl in existing_set:
+                skipped += 1
+            else:
+                existing_set.add(lbl)
+                new_labels.append(lbl)
+        if new_labels:
+            save_json_list(PRODUCT_LABELS_FILE, list(existing_set))
+        return {"success": True, "count": len(new_labels), "skipped": skipped}
 
 @app.get("/api/export/product-labels/csv")
 def export_product_labels_csv():
@@ -215,16 +235,37 @@ def delete_construction(cid: int, api_key: str = Depends(get_api_key)):
     return {"success": True}
 
 @app.post("/api/constructions/import")
-def import_constructions(file: UploadFile = File(...), api_key: str = Depends(get_api_key)):
+def import_constructions(
+    file: UploadFile = File(...),
+    mode: str = Query("replace", pattern="^(replace|diff)$"),
+    api_key: str = Depends(get_api_key)
+):
     content = file.file.read().decode("utf-8-sig")
     data = []
     reader = csv.reader(io.StringIO(content))
     header = next(reader, None)
     for i, row in enumerate(reader, start=1):
         if len(row) >= 2:
-            data.append({"id": i, "name": row[0].strip(), "code": row[1].strip(), "isActive": True})
-    save_json_list(CONSTRUCTIONS_FILE, data)
-    return {"success": True, "count": len(data)}
+            name = row[0].strip()
+            code = row[1].strip()
+            if not name or not code:
+                continue
+            data.append({"id": i, "name": name, "code": code, "isActive": True})
+    if mode == "replace":
+        save_json_list(CONSTRUCTIONS_FILE, data)
+        return {"success": True, "count": len(data)}
+    else:
+        existing = load_json_list(CONSTRUCTIONS_FILE, [])
+        existing_codes = {c["code"] for c in existing}
+        new_items = []
+        for item in data:
+            if item["code"] in existing_codes:
+                continue
+            existing.append(item)
+            new_items.append(item)
+        if new_items:
+            save_json_list(CONSTRUCTIONS_FILE, existing)
+        return {"success": True, "count": len(new_items), "skipped": len(data) - len(new_items)}
 
 @app.get("/api/processes")
 def get_processes():
@@ -265,7 +306,11 @@ def delete_process(pid: int, api_key: str = Depends(get_api_key)):
     return {"success": True}
 
 @app.post("/api/processes/import")
-def import_processes(file: UploadFile = File(...), api_key: str = Depends(get_api_key)):
+def import_processes(
+    file: UploadFile = File(...),
+    mode: str = Query("replace", pattern="^(replace|diff)$"),
+    api_key: str = Depends(get_api_key)
+):
     content = file.file.read().decode("utf-8-sig")
     data = []
     reader = csv.reader(io.StringIO(content))
@@ -276,9 +321,27 @@ def import_processes(file: UploadFile = File(...), api_key: str = Depends(get_ap
                 cid = int(row[0].strip())
             except:
                 cid = 1
-            data.append({"id": i, "constructionId": cid, "name": row[1].strip(), "code": row[2].strip(), "isActive": True})
-    save_json_list(PROCESSES_FILE, data)
-    return {"success": True, "count": len(data)}
+            name = row[1].strip()
+            code = row[2].strip()
+            if not name or not code:
+                continue
+            data.append({"id": i, "constructionId": cid, "name": name, "code": code, "isActive": True})
+    if mode == "replace":
+        save_json_list(PROCESSES_FILE, data)
+        return {"success": True, "count": len(data)}
+    else:
+        existing = load_json_list(PROCESSES_FILE, [])
+        existing_keys = {(p["constructionId"], p["code"]) for p in existing}
+        new_items = []
+        for item in data:
+            key = (item["constructionId"], item["code"])
+            if key in existing_keys:
+                continue
+            existing.append(item)
+            new_items.append(item)
+        if new_items:
+            save_json_list(PROCESSES_FILE, existing)
+        return {"success": True, "count": len(new_items), "skipped": len(data) - len(new_items)}
 
 @app.delete("/api/registrations/{entry_id}", response_model=RegistrationResponse)
 def delete_registration(entry_id: int, api_key: str = Depends(get_api_key)):
@@ -303,6 +366,27 @@ def bulk_delete_registrations(req: BulkDeleteRequest, api_key: str = Depends(get
     save_data(new_data)
     print(f"[一括削除] {deleted_count}件削除 IDs={sorted(id_set)}")
     return RegistrationResponse(success=True, message=f"{deleted_count}件を削除しました")
+
+@app.get("/download/app.apk")
+def download_apk():
+    """APKファイルをダウンロードするエンドポイント"""
+    apk_path = os.path.join(BASE_DIR, "app.apk")
+    if not os.path.exists(apk_path):
+        raise HTTPException(status_code=404, detail="APKファイルがサーバー上に見つかりません。")
+    return FileResponse(apk_path, media_type="application/vnd.android.package-archive", filename="app.apk")
+
+@app.get("/api/server-info")
+def get_server_info():
+    """サーバーのローカルIPとポートを返すAPI"""
+    hostname = socket.gethostname()
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        local_ip = socket.gethostbyname(hostname)
+    return {"local_ip": local_ip, "port": 5000}
 
 @app.get("/health")
 def health():
@@ -336,13 +420,22 @@ def dashboard():
         with open(file_path, "r", encoding="utf-8") as f:
             return f.read()
     return "dashboard.html not found"
+
+@app.get("/download", response_class=HTMLResponse)
+def download_page():
+    """アプリダウンロード専用ページのHTMLをファイルから読み込んで返す"""
+    file_path = os.path.join(BASE_DIR, "download.html")
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "download.html not found"
 # ── 自動発見 (mDNS/Zeroconf) 配信 ────────────────────────
 
 class DiscoveryServer:
     def __init__(self, port):
-        self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
         self.port = port
         self.service_info = None
+        self.zeroconf = None
 
     def start(self):
         try:
@@ -354,6 +447,9 @@ class DiscoveryServer:
                 s.close()
             except Exception:
                 local_ip = socket.gethostbyname(hostname)
+
+            # 特定のIPアドレスのみにバインドし、WSL等の仮想NICによる起動遅延を回避
+            self.zeroconf = Zeroconf(interfaces=[local_ip], ip_version=IPVersion.V4Only)
 
             # サービス名: SevenStarServer (Androidアプリ側がこの名前を探します)
             desc = {"version": "1.0", "name": "CrossVision-F-Server"}
@@ -373,9 +469,10 @@ class DiscoveryServer:
 
     def stop(self):
         try:
-            if self.service_info:
+            if self.service_info and self.zeroconf:
                 self.zeroconf.unregister_service(self.service_info)
-            self.zeroconf.close()
+            if self.zeroconf:
+                self.zeroconf.close()
         except:
             pass
 
@@ -386,9 +483,20 @@ if __name__ == "__main__":
     # ポート5000で起動 (Androidアプリのデフォルト)
     port = 5000
     
+    # 起動時のIP取得処理
+    hostname = socket.gethostname()
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        local_ip = socket.gethostbyname(hostname)
+
     print("==================================================")
     print("CrossVision F 管理サーバー 起動中")
     print(f"管理画面: http://localhost:{port}/admin")
+    print(f"アプリダウンロード用URL: http://{local_ip}:{port}/download")
     print("APIキー認証と、自動発見サービスが有効です")
     print("==================================================")
     

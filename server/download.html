@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Androidアプリ ダウンロード | 鉄骨認識システム</title>
+<meta name="description" content="鉄骨認識システムのAndroid用アプリをダウンロードしてインストールするための専用手順ページです。"/>
+<!-- Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+<!-- QRCode Library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f172a;
+  --surface:#1e293b;
+  --surface-hover:#334155;
+  --border:#334155;
+  --text:#f8fafc;
+  --muted:#94a3b8;
+  --primary:#38bdf8;
+  --primary-glow:rgba(56, 189, 248, 0.15);
+  --success:#4ade80;
+  --accent:#c084fc;
+  --radius:16px;
+  --shadow:0 10px 30px -10px rgba(0,0,0,0.5);
+}
+body{
+  font-family:'Inter','Outfit',sans-serif;
+  background-color:var(--bg);
+  background-image: radial-gradient(circle at 10% 20%, rgba(14, 165, 233, 0.1) 0%, transparent 40%),
+                    radial-gradient(circle at 90% 80%, rgba(192, 132, 252, 0.1) 0%, transparent 40%);
+  color:var(--text);
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+  line-height:1.6;
+}
+.container{
+  max-width:580px;
+  width:100%;
+  background:rgba(30, 41, 59, 0.7);
+  backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px);
+  border:1px solid rgba(255, 255, 255, 0.05);
+  border-radius:var(--radius);
+  padding:40px 30px;
+  box-shadow:var(--shadow);
+  text-align:center;
+}
+.header{
+  margin-bottom:30px;
+}
+.logo{
+  font-size:42px;
+  margin-bottom:10px;
+  display:inline-block;
+  animation: float 3s ease-in-out infinite;
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+h1{
+  font-family:'Outfit', sans-serif;
+  font-size:24px;
+  font-weight:800;
+  background: linear-gradient(to right, #38bdf8, #c084fc);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom:8px;
+}
+.subtitle{
+  font-size:14px;
+  color:var(--muted);
+}
+/* QRコード表示エリア */
+.qr-section{
+  background:rgba(15, 23, 42, 0.6);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:24px;
+  margin-bottom:30px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:16px;
+  box-shadow:inset 0 2px 4px rgba(0,0,0,0.3);
+}
+#qrcode{
+  padding:12px;
+  background:#fff;
+  border-radius:12px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:164px;
+  height:164px;
+  box-shadow:0 8px 24px rgba(0,0,0,0.2);
+}
+.download-url{
+  font-size:12px;
+  color:var(--primary);
+  text-decoration:none;
+  word-break:break-all;
+  font-family:monospace;
+  background:rgba(56, 189, 248, 0.08);
+  padding:6px 12px;
+  border-radius:8px;
+  border:1px solid rgba(56, 189, 248, 0.2);
+  transition:all 0.2s;
+  display:inline-block;
+  max-width:100%;
+}
+.download-url:hover{
+  background:rgba(56, 189, 248, 0.15);
+  border-color:var(--primary);
+  transform:translateY(-1px);
+}
+.btn-direct{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  background:linear-gradient(135deg, #38bdf8, #0284c7);
+  color:#fff;
+  text-decoration:none;
+  padding:12px 28px;
+  border-radius:30px;
+  font-weight:600;
+  font-size:14px;
+  transition:all 0.2s;
+  box-shadow:0 4px 14px rgba(56, 189, 248, 0.4);
+  border:none;
+  cursor:pointer;
+}
+.btn-direct:hover{
+  transform:translateY(-2px);
+  box-shadow:0 6px 20px rgba(56, 189, 248, 0.6);
+}
+.btn-direct:active{
+  transform:translateY(0);
+}
+/* 手順リスト */
+.steps-section{
+  text-align:left;
+  margin-top:20px;
+}
+.steps-title{
+  font-size:15px;
+  font-weight:700;
+  margin-bottom:14px;
+  color:var(--text);
+  border-left:3px solid var(--primary);
+  padding-left:8px;
+}
+.step-item{
+  display:flex;
+  gap:12px;
+  margin-bottom:14px;
+  background:rgba(255,255,255,0.02);
+  padding:12px;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.02);
+}
+.step-number{
+  width:24px;
+  height:24px;
+  background:var(--primary-glow);
+  color:var(--primary);
+  border:1px solid rgba(56, 189, 248, 0.3);
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:700;
+  font-size:12px;
+  flex-shrink:0;
+  margin-top:2px;
+}
+.step-content{
+  font-size:13px;
+  color:var(--muted);
+}
+.step-content strong{
+  color:var(--text);
+}
+.footer-text{
+  font-size:11px;
+  color:var(--muted);
+  margin-top:30px;
+  border-top:1px solid rgba(255, 255, 255, 0.05);
+  padding-top:15px;
+}
+</style>
+</head>
+<body>
+
+<div class="container" id="mainContainer">
+  <header class="header">
+    <span class="logo" role="img" aria-label="phone logo">📲</span>
+    <h1 id="appTitle">鉄骨認識アプリ インストール</h1>
+    <p class="subtitle" id="appSubtitle">同一のWi-Fiネットワークに接続してから開始してください</p>
+  </header>
+
+  <main>
+    <section class="qr-section">
+      <div id="qrcode"></div>
+      <p style="font-size: 13px; font-weight: 500;">スマートフォンでスキャンしてダウンロード</p>
+      <a id="download-link" class="btn-direct" href="#" download>
+        <span>⬇ APKを直接ダウンロード</span>
+      </a>
+      <a id="download-url-text" class="download-url" href="#" target="_blank">取得中...</a>
+    </section>
+
+    <section class="steps-section">
+      <h2 class="steps-title" id="setupGuideTitle">インストール手順</h2>
+      <div class="step-item">
+        <div class="step-number">1</div>
+        <div class="step-content">
+          端末がサーバーと<strong>同じWi-Fi（ローカルネットワーク）に接続されていること</strong>を確認します。
+        </div>
+      </div>
+      <div class="step-item">
+        <div class="step-number">2</div>
+        <div class="step-content">
+          上記のQRコードをスキャンするか、または「直接ダウンロード」ボタンをタップして<strong>APKファイルをダウンロード</strong>します。
+        </div>
+      </div>
+      <div class="step-item">
+        <div class="step-number">3</div>
+        <div class="step-content">
+          ダウンロードしたファイルを開きます。インストール時に「セキュリティ上の理由から、この提供元からの不明なアプリをインストールすることはできません」と表示された場合は、画面の指示に従ってブラウザ（Chrome等）の<strong>「この提供元のアプリを許可」を有効</strong>にし、インストールを実行します。
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer-text" id="footerText">
+    鉄骨認識システム &copy; 2026. All rights reserved.
+  </footer>
+</div>
+
+<script>
+async function generateDownloadQr() {
+  try {
+    const res = await fetch('/api/server-info');
+    if (!res.ok) throw new Error('サーバー情報の取得に失敗しました');
+    const info = await res.json();
+    const downloadUrl = `http://${info.local_ip}:${info.port}/download/app.apk`;
+    
+    // UI更新
+    const linkEl = document.getElementById("download-link");
+    const textEl = document.getElementById("download-url-text");
+    linkEl.href = downloadUrl;
+    textEl.textContent = downloadUrl;
+    textEl.href = downloadUrl;
+
+    // QRコード生成
+    const qrContainer = document.getElementById("qrcode");
+    qrContainer.innerHTML = "";
+    new QRCode(qrContainer, {
+      text: downloadUrl,
+      width: 140,
+      height: 140,
+      colorDark : "#0f172a",
+      colorLight : "#ffffff",
+      correctLevel : QRCode.CorrectLevel.M
+    });
+  } catch (e) {
+    console.error("QRコードの初期化に失敗しました:", e);
+    const textEl = document.getElementById("download-url-text");
+    textEl.textContent = "QRコードの生成に失敗しました";
+    textEl.style.color = "#ef4444";
+  }
+}
+
+window.addEventListener('DOMContentLoaded', generateDownloadQr);
+</script>
+</body>
+</html>

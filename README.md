@@ -18,6 +18,8 @@
 | **手動追加時の登録ボタンバグ修正** | `ConfirmActivity`（認識結果確認画面） | **バグ修正**。製品コードを手動追加・修正した際に、製品登録ボタンが即座に押せる状態にならない（ボタンの有効フラグが更新されない）不具合を修正しました。 |
 | **ボタン文字の見切れ修正** | `RecognizeActivity`（画像認識画面）・`ConfirmActivity`（認識結果確認画面） | **UIバグ修正**。画面比率によってボタンのテキストが見切れてしまう問題を修正。ボタン高さを `wrap_content` + 最低高さ保証に変更し、どの端末でも正しく表示されるようにしました。 |
 | **UXヒントの追加（操作案内）** | `ConfirmActivity`（認識結果確認画面） | **ユーザビリティ向上**。①認識画像エリア下部に「タップで拡大 / ピンチでズーム可能」のヒントを常時表示。②参考情報セクションに「タップして修正・追加できます」を表示。③ユーザーIDごとに初回のみ操作案内のSnackbarを表示するようにしました。 |
+| **アプリのQRコード配信・専用ダウンロードページ** | `管理サーバー` / `ダウンロード専用ページ（/download）` | **ワイヤレス（無線）アプリ配信機能の追加**。PCとUSB接続せずに、同一ネットワーク内の端末からQRコードをスキャンして直接アプリ（APK）をダウンロード・インストールできる専用ページを新設しました。また、機密性確保のため管理データ（ダッシュボード）を表示しない独立した設計とし、サーバー起動時に自動検出したローカルIPアドレスを含む案内URLをコンソールに表示する改修も行いました。 |
+| **CSVの差分インポート機能** | `管理サーバー`（ダッシュボード画面） | **データ登録方法の拡張**。製品、工事、工程のマスターデータ取り込みにおいて、従来の「洗い替え（全件削除後の新規登録）」だけでなく、既存のデータを残したまま新しいデータのみを登録する「差分インポート」を選択可能にしました。重複データは自動的にスキップされ、完了時にインポート件数とスキップ件数が表示されます。 |
 
 ---
 
@@ -185,50 +187,70 @@
 
 ```mermaid
 flowchart LR
-    subgraph androidSide[AndroidApp]
+    subgraph androidSide["Android端末 (アプリ側)"]
         direction TB
-        UiFlow["UI Flow: Login -> Process -> Recognize -> Confirm"]
-        CameraInput["Camera/Gallery Input"]
-        OcrPipeline["OCR Pipeline: Preprocess -> Detect -> Recognize -> Match"]
-        LocalDb["RoomDB: registrations/product_labels/constructions/processes"]
-        SyncWorker["SyncWorker (15min interval)"]
-        SyncManager["SyncManager"]
-        ApiClient["RetrofitClient"]
-        NsdHelper["NsdHelper (mDNS discovery)"]
+        UiFlow["画面遷移: ログイン -> 工程選択 -> 画像認識 -> 登録確認\n(工程選択 <--> 登録履歴: 履歴確認・手動同期)"]
+        CameraInput["カメラ / ギャラリー入力"]
+        OcrPipeline["文字認識処理エンジン (OCR)"]
+        LocalDb["端末内データベース (Room)"]
+        SyncWorker["バックグラウンド通信 (定期・手動同期)"]
+        SyncManager["データ送信・同期の管理"]
+        ApiClient["サーバー通信プログラム (HTTPクライアント)"]
+        NsdHelper["接続先サーバーの自動探索 (mDNS)"]
+        FileProvider["診断ログファイルの出力 (ZIP生成)"]
     end
 
-    subgraph networkLayer[LocalNetwork]
+    subgraph networkLayer["社内ネットワーク (LAN / Wi-Fi)"]
         direction TB
-        MdnsService["mDNS Service: _crossvision._tcp.local."]
-        HttpApi["HTTP API channel"]
+        MdnsService["サーバー位置の自動通知機能 (mDNS)"]
+        HttpApi["サーバーとの通信経路 (HTTP API)"]
+        ApkDownloadChannel["アプリ(APK)ダウンロード経路"]
     end
 
-    subgraph serverSide[FastAPIServer]
+    subgraph serverSide["PCサーバー (FastAPI)"]
         direction TB
-        ApiEndpoints["API Endpoints: registrations/product-labels/constructions/processes/export"]
-        ApiKeyAuth["API Key Auth: X-API-KEY"]
-        JsonStorage["JSON Storage: registrations/product_labels/constructions/processes"]
-        AdminDashboard["Admin Dashboard (/admin)"]
-        CsvExport["CSV Export (/api/export/csv)"]
-        ZeroconfAdvertise["Zeroconf Advertisement"]
+        ApiEndpoints["データ受付窓口 (APIエンドポイント)"]
+        ApiKeyAuth["暗証番号による認証 (APIキー)"]
+        JsonStorage["ファイルへのデータ保存 (JSON形式)"]
+        AdminDashboard["管理者用ダッシュボード画面"]
+        CsvImportExport["CSVデータの入出力 (一括更新・差分追加)"]
+        AppDelivery["アプリ配布用Webページ"]
+        ZeroconfAdvertise["ネットワークへのサーバー存在通知 (Zeroconf)"]
+    end
+
+    subgraph browserSide["PC・スマホ (Webブラウザ)"]
+        AdminBrowser["管理者用ブラウザ"]
+        DownloadBrowser["アプリ設置用ブラウザ"]
+    end
+
+    subgraph externalApp["外部のアプリ"]
+        ShareSheet["Android共有シート (メール・チャット等)"]
     end
 
     CameraInput --> OcrPipeline
     UiFlow --> CameraInput
+    UiFlow -.->|"エラー時・手動出力"| FileProvider
+    FileProvider -->|"ZIPデータ共有"| ShareSheet
     OcrPipeline --> LocalDb
     LocalDb --> SyncWorker
     SyncWorker --> SyncManager
     SyncManager --> ApiClient
 
-    ApiClient -->|"POST/GET sync"| HttpApi
+    ApiClient -->|"データの送受信要求"| HttpApi
     HttpApi --> ApiEndpoints
     ApiEndpoints --> ApiKeyAuth
     ApiEndpoints --> JsonStorage
-    ApiEndpoints --> CsvExport
-    ApiEndpoints --> AdminDashboard
 
-    NsdHelper -->|"discover"| MdnsService
-    ZeroconfAdvertise -->|"advertise"| MdnsService
+    AdminBrowser -->|"管理画面の操作 / CSV入出力"| AdminDashboard
+    AdminDashboard --> CsvImportExport
+    CsvImportExport --> JsonStorage
+
+    DownloadBrowser -->|"QRコードを読み取ってアクセス"| AppDelivery
+    AppDelivery -->|"APKファイルの要求"| ApkDownloadChannel
+    ApkDownloadChannel -->|"アプリ(app.apk)の配信"| DownloadBrowser
+
+    NsdHelper -->|"サーバーの自動探索"| MdnsService
+    ZeroconfAdvertise -->|"サーバー存在の通知"| MdnsService
 ```
 
 ## リポジトリ構成
@@ -252,6 +274,10 @@ CrossVisionF/
 
 - **UI層**: `login` -> `process` -> `recognize` -> `confirm` の流れで登録操作を実行
 - **OCR層**: `OcrEngine`, `OcrProcessor`, `ImagePreprocessor`, `LabelMatcher` による認識・照合
+  - **エンジンの共通化**: リアルタイムプレビュー（`CameraActivity`）と撮影後の静止画認識（`RecognizeActivity`）は、どちらも同一のOCRエンジン（`OcrEngine`）および前処理（`ImagePreprocessor`）のプロセスを共有して実行します（`OcrProcessor`のシングルトンインスタンスを経由）。これにより、両画面で読み取り精度やアルゴリズムにブレが発生しないように設計されています。
+  - **処理の差分**: 
+    - リアルタイムプレビュー時（`recognizeText`）: 画面の軽快さを最優先するため、ポリゴン（認識エリアの枠）検出数を制限し、切り抜き画像の保存や枠線描画などの重い処理をスキップします。
+    - 静止画認識時（`recognizeWithOverlay`）: 保存前の確定・確認処理の正確さを最優先するため、検出領域を枠線で囲んだオーバーレイ画像を生成し、認識に使用した文字領域の切り抜き（クロップ画像）を一時キャッシュファイルとして保存してUIに引き渡します。
 - **データ層**: Room (`AppDatabase`, `RegistrationDao`, `ProductLabelDao` など) と Retrofit (`ApiService`)
 - **同期層**: `SyncWorker` が15分間隔で定期同期、`SyncManager` が送受信を実施
 - **自動発見**: `NsdHelper` が `_crossvision._tcp` を探索してサーバー接続先を取得
@@ -594,7 +620,7 @@ score = confidence × 0.80          // 信頼度（重み 80%）
 
 | 項目 | 現在値 | 定義箇所 |
 |---|---|---|
-| Android package (debug) | `com.crossvision.f.saito18` | `app/build.gradle.kts` |
+| Android package (debug) | `com.crossvision.f.saito19` | `app/build.gradle.kts` |
 | Server port | `5000` | `server/main.py` |
 | API header | `X-API-KEY` | `server/main.py`, `RetrofitClient.kt` |
 | API key value | `cvf_7s_9922_zrkp_8x11` | `server/main.py`, `RetrofitClient.kt` |
